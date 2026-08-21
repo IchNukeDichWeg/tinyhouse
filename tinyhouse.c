@@ -253,11 +253,19 @@ uint64_t th_perft(THPos *p, int depth) {
  * needs to repeat, and the defender can force the claim by looping).
  * Results whose value depended on a repetition hitting an ANCESTOR of the
  * node are path-dependent and are never stored in the TT (rep-safety; this
- * is what keeps the graph-history interaction problem out). Check moves
- * extend by one ply, so "depth" bounds quiet length, not total length.
+ * is what keeps the graph-history interaction problem out).
+ *
+ * Multithreading: lazy SMP. Helper threads search the same root (half of
+ * them one ply deeper) sharing the TT; per-thread state (path, killers,
+ * history) is thread-local. TT entries are two 64-bit words with the
+ * key XOR data validation trick, so a torn read from a concurrent write
+ * can never validate - a shared entry is either intact or ignored, which
+ * keeps mate proofs sound. Aborted (g_abort) subtrees never store.
  */
 #include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <stdatomic.h>
 
 #define MATE 30000
 #define MATE_BOUND 29000
@@ -278,22 +286,86 @@ uint64_t th_key(const THPos *p) {
     return k;
 }
 
-typedef struct { uint64_t key; int16_t value; uint16_t move; uint8_t depth; uint8_t flag; uint8_t sound; } TTEntry;
+/* TT entry: data packs value(16) | move(16) | depth(8) | flag(4) | sound(4);
+ * xkey = key ^ data. calloc zero-fill never validates against a real key. */
+typedef struct { _Atomic uint64_t xkey; _Atomic uint64_t data; } TTEntry;
 enum { TT_EMPTY, TT_EXACT, TT_LOWER, TT_UPPER };
 #define SND_LB 1
 #define SND_UB 2
 static TTEntry *tt = 0;
 static uint64_t tt_mask = 0;
-static uint64_t path[MAXPLY];
-static uint64_t nodes = 0;
-static int16_t history[2][2048];
-static uint16_t killers[MAXPLY][2];
+static _Thread_local uint64_t path[MAXPLY];
+static _Thread_local int16_t history[2][2048];
+static _Thread_local uint16_t killers[MAXPLY][2];
+static _Thread_local uint64_t tl_pending = 0;
+static _Thread_local uint32_t tl_jitter = 0;   /* helper-thread ordering noise */
+static _Atomic uint64_t g_nodes;
+static volatile int g_abort = 0;
 
 void th_tt_init(int log2_entries) {
     if (tt) free(tt);
     uint64_t n = 1ULL << log2_entries;
     tt = calloc(n, sizeof(TTEntry));
     tt_mask = n - 1;
+}
+
+static void nodes_flush(void) {
+    if (tl_pending) { atomic_fetch_add_explicit(&g_nodes, tl_pending, memory_order_relaxed); tl_pending = 0; }
+}
+uint64_t th_nodes(void) { nodes_flush(); return atomic_load_explicit(&g_nodes, memory_order_relaxed); }
+
+typedef struct { int16_t value; uint16_t move; uint8_t depth, flag, sound; } TTView;
+
+static int tt_probe(uint64_t key, TTView *out) {
+    if (!tt) return 0;
+    TTEntry *e = &tt[key & tt_mask];
+    uint64_t d = atomic_load_explicit(&e->data, memory_order_relaxed);
+    uint64_t x = atomic_load_explicit(&e->xkey, memory_order_relaxed);
+    if ((x ^ d) != key || !d) return 0;
+    out->value = (int16_t)(d & 0xffff);
+    out->move = (uint16_t)(d >> 16 & 0xffff);
+    out->depth = (uint8_t)(d >> 32 & 0xff);
+    out->flag = (uint8_t)(d >> 40 & 0xf);
+    out->sound = (uint8_t)(d >> 44 & 0xf);
+    return 1;
+}
+
+static void tt_store(uint64_t key, int16_t value, uint16_t move, uint8_t depth, uint8_t flag, uint8_t sound) {
+    TTEntry *e = &tt[key & tt_mask];
+    uint64_t d = (uint64_t)(uint16_t)value | (uint64_t)move << 16 | (uint64_t)depth << 32
+               | (uint64_t)flag << 40 | (uint64_t)sound << 44;
+    atomic_store_explicit(&e->data, d, memory_order_relaxed);
+    atomic_store_explicit(&e->xkey, key ^ d, memory_order_relaxed);
+}
+
+/* TT persistence: a multi-hour depth is worth resuming. Entries are
+ * self-validating (xkey ^ data == key) and keyed by the Zobrist tables, so a
+ * dump is only meaningful under the same seed - the header stores it and the
+ * loader refuses a mismatch rather than silently importing garbage keys. */
+static uint64_t tt_seed_used = 0;
+
+int th_tt_save(const char *fname) {
+    if (!tt) return -1;
+    FILE *f = fopen(fname, "wb");
+    if (!f) return -1;
+    uint64_t hdr[3] = {0x54494E59484F5553ULL, tt_mask + 1, tt_seed_used};
+    int ok = fwrite(hdr, sizeof hdr, 1, f) == 1 &&
+             fwrite(tt, sizeof(TTEntry), tt_mask + 1, f) == tt_mask + 1;
+    fclose(f);
+    return ok ? 0 : -1;
+}
+
+/* returns 0 on success, -1 on missing/unreadable, -2 on size/seed mismatch */
+int th_tt_load(const char *fname) {
+    if (!tt) return -1;
+    FILE *f = fopen(fname, "rb");
+    if (!f) return -1;
+    uint64_t hdr[3];
+    if (fread(hdr, sizeof hdr, 1, f) != 1 || hdr[0] != 0x54494E59484F5553ULL) { fclose(f); return -1; }
+    if (hdr[1] != tt_mask + 1 || hdr[2] != tt_seed_used) { fclose(f); return -2; }
+    int ok = fread(tt, sizeof(TTEntry), tt_mask + 1, f) == tt_mask + 1;
+    fclose(f);
+    return ok ? 0 : -1;
 }
 
 typedef struct { int rep_min; uint8_t snd; } SInfo;
@@ -325,13 +397,15 @@ static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks
     if (s) return s;
     if (m == killers[ply][0]) return (1 << 19);
     if (m == killers[ply][1]) return (1 << 19) - 1;
-    return history[(int)p->stm][m & 2047];
+    int j = tl_jitter ? (int)(((m ^ tl_jitter) * 2654435761u) >> 27) : 0;
+    return history[(int)p->stm][m & 2047] + j;
 }
 
 static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) {
-    nodes++;
     si->rep_min = MAXPLY;
     si->snd = 0;
+    if (g_abort) return 0;
+    if (++tl_pending >= 4096) nodes_flush();
 
     /* mate distance pruning: value here is within [-(MATE-ply), MATE-ply] */
     if (alpha < -(MATE - ply)) alpha = -(MATE - ply);
@@ -345,23 +419,22 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) 
     path[ply] = key;
 
     uint16_t ttm = 0;
-    TTEntry *e = tt ? &tt[key & tt_mask] : 0;
-    if (e && e->key == key && e->flag != TT_EMPTY) {
-        ttm = e->move;
-        int v = e->value;
+    TTView tv;
+    int tv_hit = tt_probe(key, &tv);
+    if (tv_hit) {
+        ttm = tv.move;
+        int v = tv.value;
         if (v > MATE_BOUND) v -= ply;
         else if (v < -MATE_BOUND) v += ply;
-        int sound = e->sound;
-        int usable = e->depth >= depth || sound;
-        if (usable && ply > 0) {
-            if (e->flag == TT_EXACT && (e->depth >= depth || sound == (SND_LB | SND_UB))) {
-                si->snd = sound; return v;
+        if (ply > 0) {
+            if (tv.flag == TT_EXACT && (tv.depth >= depth || tv.sound == (SND_LB | SND_UB))) {
+                si->snd = tv.sound; return v;
             }
-            if (e->flag == TT_LOWER && v >= beta && (e->depth >= depth || (sound & SND_LB))) {
-                si->snd = sound & SND_LB; return v;
+            if (tv.flag == TT_LOWER && v >= beta && (tv.depth >= depth || (tv.sound & SND_LB))) {
+                si->snd = tv.sound & SND_LB; return v;
             }
-            if (e->flag == TT_UPPER && v <= alpha && (e->depth >= depth || (sound & SND_UB))) {
-                si->snd = sound & SND_UB; return v;
+            if (tv.flag == TT_UPPER && v <= alpha && (tv.depth >= depth || (tv.sound & SND_UB))) {
+                si->snd = tv.sound & SND_UB; return v;
             }
         }
     }
@@ -396,9 +469,8 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) 
         make(p, m, &u);
         if (th_in_check(p, 1 - p->stm)) { unmake(p, &u); continue; }
         any = 1;
-        int ext = th_in_check(p, p->stm) ? 1 : 0;   /* check extension */
         SInfo ci;
-        int v = -search(p, depth - 1 + ext, ply + 1, -beta, -alpha, &ci);
+        int v = -search(p, depth - 1, ply + 1, -beta, -alpha, &ci);
         unmake(p, &u);
         if (ci.rep_min < my_rep) my_rep = ci.rep_min;
         if (!(ci.snd & SND_LB)) all_children_lb = 0;
@@ -429,62 +501,90 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) 
     si->snd = snd;
     si->rep_min = my_rep;
 
-    if (e && my_rep >= ply) {
+    if (tt && my_rep >= ply && !g_abort) {
         int flag = best <= alpha0 ? TT_UPPER : cutoff ? TT_LOWER : TT_EXACT;
         uint8_t ssnd = flag == TT_EXACT ? snd :
                        flag == TT_LOWER ? (snd & SND_LB) : (snd & SND_UB);
         int proven = (ssnd == (SND_LB | SND_UB) && flag == TT_EXACT) ||
                      best > MATE_BOUND || best < -MATE_BOUND;
-        int old_proven = e->sound == (SND_LB | SND_UB) && e->flag == TT_EXACT;
-        if (e->flag == TT_EMPTY || proven || (!old_proven && depth >= e->depth)) {
+        /* replacement decision reuses the entry probed at node entry; skip
+         * unproven depth-1 stores entirely (they are most of the write
+         * traffic and nearly worthless, and they thrash shared cache lines) */
+        int old_proven = tv_hit && tv.sound == (SND_LB | SND_UB) && tv.flag == TT_EXACT;
+        if ((depth >= 2 || proven) &&
+            (!tv_hit || proven || (!old_proven && depth >= tv.depth))) {
             int sv = best;
             if (sv > MATE_BOUND) sv += ply;
             else if (sv < -MATE_BOUND) sv -= ply;
-            e->key = key; e->value = sv; e->move = bestm;
-            e->depth = depth < 0 ? 0 : depth; e->flag = flag; e->sound = ssnd;
+            tt_store(key, (int16_t)sv, bestm, (uint8_t)(depth < 0 ? 0 : depth), (uint8_t)flag, ssnd);
         }
     }
     return best;
 }
 
-uint64_t th_nodes(void) { return nodes; }
+typedef struct { THPos pos; int depth, alpha, beta; } HelperArg;
 
-/* Search at given depth, full window. Returns value; *snd gets soundness
- * flags (bit0: value is a proven lower bound, bit1: proven upper bound;
- * both = exact game value). |v| > 29000 means forced win/loss in MATE-|v|
- * plies and is proven whenever the corresponding bound flag is set. */
-int th_solve(THPos *p, int depth, uint16_t *bestmove, int *snd) {
+static _Atomic uint32_t g_tid;
+
+static void *helper_main(void *v) {
+    HelperArg *a = v;
+    tl_jitter = 0x9E3779B9u * (atomic_fetch_add(&g_tid, 1) + 1);
     SInfo si;
+    search(&a->pos, a->depth, 0, a->alpha, a->beta, &si);
+    nodes_flush();
+    return 0;
+}
+
+/* Root search with lazy-SMP helpers. Returns value from side-to-move's
+ * perspective; *snd gets the soundness flags of the MAIN thread's result. */
+static int root_search(THPos *p, int depth, int alpha, int beta, int workers,
+                       uint16_t *bestmove, int *snd) {
     memset(killers, 0, sizeof killers);
-    int v = search(p, depth, 0, -MATE, MATE, &si);
+    g_abort = 0;
+    pthread_t th[63];
+    HelperArg args[63];
+    int nh = workers - 1;
+    if (nh < 0) nh = 0;
+    if (nh > 63) nh = 63;
+    for (int i = 0; i < nh; i++) {
+        args[i].pos = *p; args[i].depth = depth + (i & 1);
+        args[i].alpha = alpha; args[i].beta = beta;
+        pthread_create(&th[i], 0, helper_main, &args[i]);
+    }
+    SInfo si;
+    int v = search(p, depth, 0, alpha, beta, &si);
+    g_abort = 1;
+    for (int i = 0; i < nh; i++) pthread_join(th[i], 0);
+    g_abort = 0;
+    nodes_flush();
     if (snd) *snd = si.snd;
-    if (bestmove && tt) {
-        TTEntry *e = &tt[th_key(p) & tt_mask];
-        *bestmove = (e->key == th_key(p)) ? e->move : 0;
+    if (bestmove) {
+        TTView tv;
+        *bestmove = tt_probe(th_key(p), &tv) ? tv.move : 0;
     }
     return v;
 }
 
+int th_solve_mt(THPos *p, int depth, int workers, uint16_t *bestmove, int *snd) {
+    return root_search(p, depth, -MATE, MATE, workers, bestmove, snd);
+}
+int th_solve(THPos *p, int depth, uint16_t *bestmove, int *snd) {
+    return th_solve_mt(p, depth, 1, bestmove, snd);
+}
 int th_search(THPos *p, int depth, uint16_t *bestmove) {
     return th_solve(p, depth, bestmove, 0);
 }
 
 /* Null-window mate hunt: proves/disproves "the given color forces a win
- * within `depth` quiet plies (checks extend)". Returns the mate value if
- * proven (>MATE_BOUND from that color's perspective) else the fail value. */
-int th_mate_hunt(THPos *p, int depth, int color, uint16_t *bestmove) {
-    SInfo si;
-    memset(killers, 0, sizeof killers);
-    int v;
+ * within depth plies". Returns the value from that color's perspective;
+ * > MATE_BOUND is a proof. */
+int th_mate_hunt_mt(THPos *p, int depth, int color, int workers, uint16_t *bestmove) {
     if (p->stm == color)
-        v = search(p, depth, 0, MATE_BOUND, MATE, &si);
-    else
-        v = -search(p, depth, 0, -MATE, -MATE_BOUND, &si);
-    if (bestmove && tt) {
-        TTEntry *e = &tt[th_key(p) & tt_mask];
-        *bestmove = (e->key == th_key(p)) ? e->move : 0;
-    }
-    return v; /* from `color`'s perspective */
+        return root_search(p, depth, MATE_BOUND, MATE, workers, bestmove, 0);
+    return -root_search(p, depth, -MATE, -MATE_BOUND, workers, bestmove, 0);
+}
+int th_mate_hunt(THPos *p, int depth, int color, uint16_t *bestmove) {
+    return th_mate_hunt_mt(p, depth, color, 1, bestmove);
 }
 
 /* Per-root-move values at fixed depth (root side's perspective). */
@@ -501,13 +601,26 @@ int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values) {
         unmake(p, &u);
         out_moves[i] = buf[i]; out_values[i] = v;
     }
+    nodes_flush();
     return n;
+}
+
+/* Reseed the Zobrist tables. A 64-bit key can collide, and a colliding
+ * position inheriting a sound-flagged entry would return another position's
+ * value flagged as PROVEN. Re-running a proof under a different seed makes
+ * the two runs' collision sets independent, so agreement across seeds is the
+ * cheap check against that tail risk. Callers must clear the TT after this
+ * (th_tt_init), since existing entries are keyed under the old tables. */
+void th_seed(uint64_t s) {
+    rng_state = s ? s : 0x9E3779B97F4A7C15ULL;
+    tt_seed_used = rng_state;
+    for (int i = 0; i < 16; i++) for (int j = 0; j < 32; j++) zob_piece[i][j] = rng64();
+    for (int c = 0; c < 2; c++) for (int t = 0; t < 4; t++)
+        for (int i = 0; i < 3; i++) zob_hand[c][t][i] = rng64();
+    zob_stm = rng64();
 }
 
 void th_init(void) {
     init_tables();
-    for (int s = 0; s < 16; s++) for (int i = 0; i < 32; i++) zob_piece[s][i] = rng64();
-    for (int c = 0; c < 2; c++) for (int t = 0; t < 4; t++)
-        for (int i = 0; i < 3; i++) zob_hand[c][t][i] = rng64();
-    zob_stm = rng64();
+    th_seed(0x9E3779B97F4A7C15ULL);
 }

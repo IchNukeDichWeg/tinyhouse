@@ -14,7 +14,7 @@ _SRC = _DIR / "tinyhouse.c"
 _LIB = _DIR / "libtinyhouse.dylib"
 
 if not _LIB.exists() or _LIB.stat().st_mtime < _SRC.stat().st_mtime:
-    subprocess.run(["cc", "-O2", "-shared", "-o", str(_LIB), str(_SRC)], check=True)
+    subprocess.run(["cc", "-O2", "-pthread", "-shared", "-o", str(_LIB), str(_SRC)], check=True)
 
 ffi = cffi.FFI()
 ffi.cdef("""
@@ -27,9 +27,14 @@ int th_result(THPos *p);
 uint64_t th_perft(THPos *p, int depth);
 uint64_t th_key(const THPos *p);
 void th_tt_init(int log2_entries);
+void th_seed(uint64_t s);
+int th_tt_save(const char *fname);
+int th_tt_load(const char *fname);
 uint64_t th_nodes(void);
 int th_search(THPos *p, int depth, uint16_t *bestmove);
 int th_solve(THPos *p, int depth, uint16_t *bestmove, int *snd);
+int th_solve_mt(THPos *p, int depth, int workers, uint16_t *bestmove, int *snd);
+int th_mate_hunt_mt(THPos *p, int depth, int color, int workers, uint16_t *bestmove);
 int th_mate_hunt(THPos *p, int depth, int color, uint16_t *bestmove);
 int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values);
 """)
