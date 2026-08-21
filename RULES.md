@@ -95,9 +95,12 @@ VERIFIED (wiki Crazyhouse page, which documents the variants-server implementati
   - the wiki Crazyhouse page's "Pawn dropped on 2nd rank can double move" refers to
     the embedded standard 8x8 board where base ranks exist inside the board.
   We therefore implement **no double-step** as the primary rule, with a visible
-  `DOUBLE_STEP` toggle in the engine to quantify the alternative (a double-step here
-  would land on the promotion rank and promote immediately).
+  `DOUBLE_STEP` toggle in the Python engine to quantify the alternative (a double-step
+  here would land on the promotion rank and promote immediately).
   UNVERIFIED empirically; the login wall blocked the direct test.
+  Alternative-ruleset perft from the start (DOUBLE_STEP=True): 6, 36, 274, 2181,
+  19317 for depths 1-5 (primary: 6, 33, 241, 1855, 16021 — the double-step is blocked
+  at the start by the piece on each promotion square, so depth 1 is unchanged).
 - **En passant is provably dead either way.** An ep capture of a White double-step
   (a2-a4 etc.) would require a Black pawn on rank 4 attacking the passed rank-3 square.
   Black pawns can never be on rank 4: pawn drops are barred from ranks 1/4, Black pawns
