@@ -16,12 +16,17 @@ DIR = Path(__file__).parent
 DB = DIR / "analysis.sqlite"
 STATUS = DIR / "solve_status.json"
 
+# Bump when the search changes in a way that can change stored values, so a
+# stale cache from an older engine is never served as this engine's result.
+ENGINE_VERSION = 2
+
 E.lib.th_tt_init(24)
 # ponytail: one global engine lock -- the C search uses global TT/path state;
 # per-request engines if this ever serves more than one user
 ENGINE_LOCK = threading.Lock()
 db = sqlite3.connect(DB, check_same_thread=False)
-db.execute("CREATE TABLE IF NOT EXISTS analysis (tfen TEXT, depth INT, json TEXT, PRIMARY KEY(tfen, depth))")
+db.execute("CREATE TABLE IF NOT EXISTS analysis "
+           "(tfen TEXT, depth INT, version INT, json TEXT, PRIMARY KEY(tfen, depth, version))")
 DB_LOCK = threading.Lock()
 
 
@@ -31,7 +36,8 @@ def white_view(v: int, stm: int) -> int:
 
 def analyze(tfen: str, depth: int) -> dict:
     with DB_LOCK:
-        row = db.execute("SELECT json FROM analysis WHERE tfen=? AND depth=?", (tfen, depth)).fetchone()
+        row = db.execute("SELECT json FROM analysis WHERE tfen=? AND depth=? AND version=?",
+                         (tfen, depth, ENGINE_VERSION)).fetchone()
     if row:
         out = json.loads(row[0])
         out["cached"] = True
@@ -56,7 +62,8 @@ def analyze(tfen: str, depth: int) -> dict:
            "best": T.move_str(bm[0]) if bm[0] else None, "moves": moves,
            "nodes": nodes, "time": round(dt, 3), "cached": False}
     with DB_LOCK:
-        db.execute("INSERT OR REPLACE INTO analysis VALUES (?,?,?)", (tfen, depth, json.dumps(out)))
+        db.execute("INSERT OR REPLACE INTO analysis VALUES (?,?,?,?)",
+                   (tfen, depth, ENGINE_VERSION, json.dumps(out)))
         db.commit()
     return out
 

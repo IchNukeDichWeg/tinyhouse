@@ -227,11 +227,18 @@ function tryMove(from, to) {
       s.onclick = () => { $("promo").style.display = "none"; playMove(c); };
       inner.appendChild(s);
     }
+    const cancel = document.createElement("span");
+    cancel.textContent = "\u2715";
+    cancel.style.cssText = "font-size:40px;align-self:center;opacity:.6";
+    cancel.title = "cancel";
+    cancel.onclick = () => { $("promo").style.display = "none"; };
+    inner.appendChild(cancel);
     $("promo").style.display = "flex";
   }
 }
 function playMove(m) {
   const next = state.info.moves[m];
+  if (!next) return;   // stale UI or a move not legal in the current position
   const moves = (state.hist.moves || []).slice(0, state.histAt).concat([m]);
   state.hist = state.hist.slice(0, state.histAt + 1).concat([next]);
   state.hist.moves = moves;
@@ -274,9 +281,12 @@ async function analyze() {
   } catch (e) { if (seq === analyzeSeq) $("evalbig").textContent = "error: " + e.message; }
 }
 
+let loadSeq = 0;
 async function load(tfen) {
+  const seq = ++loadSeq;
   try {
     const info = await api("/api/position", {tfen});
+    if (seq !== loadSeq) return;   // a newer load already won
     state.tfen = tfen; state.info = info; state.sel = null; state.handSel = null;
     state.board = info.board; state.hands = {w: info.hands.w, b: info.hands.b}; state.stm = info.stm;
     $("tfen").value = tfen;
@@ -358,10 +368,13 @@ $("btnsetup").onclick = () => {
   state.setup = !state.setup;
   $("setup").style.display = state.setup ? "block" : "none";
   $("btnsetup").textContent = state.setup ? "Cancel setup" : "Setup mode";
-  if (state.setup) renderSetup();
+  if (state.setup) { syncStmLabel(); renderSetup(); }
   else load(state.tfen);
 };
-$("btnstm").onclick = () => { state.stm = state.stm === "w" ? "b" : "w"; $("btnstm").textContent = "Side to move: " + (state.stm === "w" ? "white" : "black"); };
+function syncStmLabel() {
+  $("btnstm").textContent = "Side to move: " + (state.stm === "w" ? "white" : "black");
+}
+$("btnstm").onclick = () => { state.stm = state.stm === "w" ? "b" : "w"; syncStmLabel(); };
 $("btnclear").onclick = () => { state.board = Array(16).fill(null); state.hands = {w:[0,0,0,0], b:[0,0,0,0]}; renderBoard(); renderSetup(); };
 $("btndone").onclick = () => {
   state.setup = false; $("setup").style.display = "none"; $("btnsetup").textContent = "Setup mode";
@@ -371,9 +384,22 @@ $("btndone").onclick = () => {
 $("btnstart").onclick = () => { state.hist = [START]; state.hist.moves = []; state.histAt = 0; load(START); };
 $("btnundo").onclick = () => { if (state.histAt > 0) { state.histAt--; load(state.hist[state.histAt]); } };
 $("btnredo").onclick = () => { if (state.histAt < state.hist.length - 1) { state.histAt++; load(state.hist[state.histAt]); } };
-$("btnload").onclick = () => { const t = $("tfen").value.trim(); state.hist = [t]; state.hist.moves = []; state.histAt = 0; load(t); };
+$("btnload").onclick = async () => {
+  const t = $("tfen").value.trim();
+  try { await api("/api/position", {tfen: t}); }        // validate first
+  catch (e) { alert("Bad position: " + e.message); return; }   // history intact
+  state.hist = [t]; state.hist.moves = []; state.histAt = 0;
+  load(t);
+};
 $("depth").innerHTML = [8,10,12,14,16,18,20,22].map(d => `<option ${d===14?"selected":""}>${d}</option>`).join("");
 $("depth").onchange = analyze;
+
+$("promo").addEventListener("click", ev => {
+  if (ev.target === $("promo")) $("promo").style.display = "none";
+});
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape") $("promo").style.display = "none";
+});
 
 api("/api/status", {}).then(s => {
   if (s.summary) $("status").textContent = "Solve status: " + s.summary;
