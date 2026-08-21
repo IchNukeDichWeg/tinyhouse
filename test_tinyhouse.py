@@ -125,3 +125,29 @@ def test_drop_always_legal_when_not_in_check():
     pos = Position.from_tfen("k3/2K1/W3/4[p] b")
     assert pos.result() is None
     assert all(T.m_is_drop(m) for m in pos.legal_moves())
+
+
+# -- TFEN is a trust boundary (server.py feeds it raw HTTP input) ------------
+
+@pytest.mark.parametrize("bad", [
+    "fuwk/3p/P3/KWUF[-] W",          # capital W is not a side-to-move token
+    "fuwk/3p/P3/KWUF[-] w 0 1",      # FEN-style counters must not parse as black
+    "fuwk/3p/P3/KWUF[-]",            # missing side to move
+    "fuwk/3p/P3/KWUF[-] x",          # garbage side to move
+    "fuwk/3p/KWUF[-] w",             # 3 ranks
+    "fuwk/3p/P3/KWUFF[-] w",         # rank overflows the board
+    "fuwk/3p/P3/KWUF[-] w extra]",   # two hand sections
+    "fuwk/3p/P3/KWUF[Z] w",          # bad hand piece
+    "fuwk/3p/P3/KWUF[K] w",          # kings are never in hand
+    "fuwk/3p/P3/KWUZ[-] w",          # bad board character
+    "fuwk/3p/P3/KWUF[FF] w",         # 3 ferzes in the game
+    "3k/4/4/4[-] w",                 # no white king
+    "k3/K3/4/4[-] w",                # side not to move is in check
+])
+def test_from_tfen_rejects_malformed(bad):
+    with pytest.raises(ValueError):
+        Position.from_tfen(bad)
+
+
+def test_from_tfen_accepts_black_to_move():
+    assert Position.from_tfen("fuwk/3p/P3/KWUF[-] b").stm == T.BLACK

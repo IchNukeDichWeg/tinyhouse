@@ -98,14 +98,23 @@ class Position:
 
     # -- serialization (TFEN): ranks 4->1, '~' suffix = promoted, hands in
     # [..] with uppercase = white, '-' if both empty, then side to move.
+    # This is a trust boundary: server.py feeds it unvalidated HTTP input, so
+    # every structural rule raises ValueError rather than asserting (asserts
+    # vanish under -O and would let a malformed board parse into a wrong one).
     @staticmethod
     def from_tfen(tfen: str) -> "Position":
         pos = Position()
+        if tfen.count("[") != 1 or tfen.count("]") != 1:
+            raise ValueError(f"TFEN needs exactly one [hand] section: {tfen!r}")
         boardpart, rest = tfen.split("[")
         handpart, stmpart = rest.split("]")
-        pos.stm = WHITE if stmpart.strip() == "w" else BLACK
+        stm = stmpart.strip()
+        if stm not in ("w", "b"):
+            raise ValueError(f"TFEN side to move must be 'w' or 'b', got {stm!r}")
+        pos.stm = WHITE if stm == "w" else BLACK
         ranks = boardpart.strip().split("/")
-        assert len(ranks) == 4, tfen
+        if len(ranks) != 4:
+            raise ValueError(f"TFEN needs 4 ranks, got {len(ranks)}: {tfen!r}")
         for i, rank in enumerate(ranks):
             r, f = 3 - i, 0
             j = 0
@@ -113,7 +122,9 @@ class Position:
                 c = rank[j]
                 if c.isdigit():
                     f += int(c)
-                else:
+                elif c.upper() in TYPE_CHARS:
+                    if f > 3:
+                        raise ValueError(f"TFEN rank {4-i} overflows the board: {tfen!r}")
                     color = WHITE if c.isupper() else BLACK
                     t = TYPE_CHARS.index(c.upper())
                     promoted = j + 1 < len(rank) and rank[j + 1] == "~"
@@ -121,12 +132,40 @@ class Position:
                         j += 1
                     pos.board[_sq(f, r)] = piece(color, t, promoted)
                     f += 1
+                else:
+                    raise ValueError(f"TFEN has bad character {c!r}: {tfen!r}")
                 j += 1
-            assert f == 4, tfen
+            if f != 4:
+                raise ValueError(f"TFEN rank {4-i} covers {f} files, need 4: {tfen!r}")
         if handpart != "-":
             for c in handpart:
+                if c.upper() not in TYPE_CHARS or c.upper() == "K":
+                    raise ValueError(f"TFEN has bad hand piece {c!r}: {tfen!r}")
                 color = WHITE if c.isupper() else BLACK
                 pos.hands[color][TYPE_CHARS.index(c.upper())] += 1
+        # Each side owns exactly one king, and each of the 4 non-king unit
+        # types exists exactly twice in the game (board + both hands), pawn
+        # origins counted through promotions. th_key packs hand counts as 0-2,
+        # so an over-full hand would read out of bounds in the C engine.
+        counts = {t: 0 for t in range(4)}
+        for pc in pos.board:
+            if pc:
+                if ptype(pc) == K:
+                    continue
+                counts[P if ppromoted(pc) else ptype(pc)] += 1
+        for color in (WHITE, BLACK):
+            if pos.board.count(piece(color, K)) != 1:
+                raise ValueError(f"TFEN needs exactly one {'white' if color == WHITE else 'black'} king: {tfen!r}")
+            for t in range(4):
+                counts[t] += pos.hands[color][t]
+        for t, n in counts.items():
+            if n > 2:
+                raise ValueError(f"TFEN has {n} {TYPE_CHARS[t]} units, max 2: {tfen!r}")
+        # The side that just moved may not be left in check. Besides being an
+        # illegal position, it would let pseudo_moves generate a king capture,
+        # and make() would index hands[us][K] out of range.
+        if pos.in_check(1 - pos.stm):
+            raise ValueError(f"TFEN leaves the side not to move in check: {tfen!r}")
         return pos
 
     def tfen(self) -> str:
