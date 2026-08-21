@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tinyhouse</title>
+<style>
+  :root { --sq: 92px; --light:#e8d5b0; --dark:#a97b4f; --bg:#22262b; --panel:#2c3138; --tx:#e6e2da; }
+  * { box-sizing: border-box; }
+  body { background:var(--bg); color:var(--tx); font:15px/1.45 system-ui, sans-serif; margin:0; padding:18px; }
+  h1 { font-size:20px; margin:0 0 10px; }
+  .wrap { display:flex; gap:22px; flex-wrap:wrap; }
+  .boardcol { width: calc(var(--sq)*4 + 24px); }
+  .board { display:grid; grid-template-columns:repeat(4, var(--sq)); border:4px solid #55402c; width:max-content; }
+  .sq { width:var(--sq); height:var(--sq); display:flex; align-items:center; justify-content:center;
+        font-size:64px; cursor:pointer; position:relative; user-select:none; }
+  .sq.light { background:var(--light); } .sq.dark { background:var(--dark); }
+  .sq.sel { outline:4px solid #3aa2f0; outline-offset:-4px; }
+  .sq.tgt::after { content:""; position:absolute; width:26px; height:26px; border-radius:50%;
+                   background:rgba(30,120,220,.55); }
+  .sq.tgt.occ::after { width:80px; height:80px; background:none; border:5px solid rgba(30,120,220,.55); }
+  .sq .coord { position:absolute; left:4px; top:2px; font-size:12px; color:#00000055; }
+  img.piece { width:86%; height:86%; }
+  .pmark { position:absolute; top:2px; right:6px; color:#c33; font-size:22px; font-weight:700; }
+  .hand { display:flex; gap:6px; min-height:52px; align-items:center; margin:6px 0; }
+  .hand .hp { cursor:grab; background:var(--panel); border-radius:8px; padding:4px 8px; display:flex; align-items:center; }
+  .hand .hp img { height:38px; pointer-events:none; }
+  .hand .hp.sel { outline:3px solid #3aa2f0; }
+  .hand .cnt { font-size:14px; vertical-align:super; }
+  .panel { background:var(--panel); border-radius:10px; padding:12px 14px; margin-bottom:14px; width:360px; }
+  .panel h2 { font-size:14px; margin:0 0 8px; text-transform:uppercase; letter-spacing:.08em; color:#9fb0c0; }
+  button, select, input { background:#3a4149; color:var(--tx); border:1px solid #555; border-radius:6px;
+        padding:5px 10px; font-size:14px; cursor:pointer; }
+  button:hover { background:#46505a; }
+  #evalbig { font-size:26px; font-weight:700; }
+  #moves td { padding:2px 10px 2px 0; cursor:pointer; }
+  #moves tr:hover { background:#3a4149; }
+  #history { max-height:130px; overflow-y:auto; font-family:ui-monospace, monospace; font-size:13px; }
+  #history span { cursor:pointer; margin-right:7px; }
+  #history span.cur { color:#7fc4ff; font-weight:700; }
+  #tfen { width:100%; font-family:ui-monospace, monospace; font-size:12px; }
+  .modal { position:fixed; inset:0; background:#0009; display:flex; align-items:center; justify-content:center; }
+  .modal .inner { background:var(--panel); padding:22px; border-radius:12px; display:flex; gap:18px; }
+  .modal .inner img { height:64px; cursor:pointer; }
+  .modal .inner span { cursor:pointer; }
+  .setuprow { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:4px 0; }
+  .pal { padding:2px 6px; cursor:pointer; border-radius:6px; font-size:26px; display:flex; align-items:center; }
+  .pal img { height:30px; pointer-events:none; }
+  .pal.sel { background:#3aa2f0; }
+  .muted { color:#9fb0c0; font-size:13px; }
+  #status { font-size:13px; color:#cfc79b; margin:4px 0 10px; }
+  .badge { display:inline-block; background:#3a4149; border-radius:5px; padding:1px 7px; font-size:12px; margin-left:6px; }
+</style>
+</head>
+<body>
+<h1>Tinyhouse <span class="muted">4x4 crazyhouse — stalemated player wins</span></h1>
+<div id="status"></div>
+<div class="wrap">
+  <div class="boardcol">
+    <div class="hand" id="handb"></div>
+    <div class="board" id="board"></div>
+    <div class="hand" id="handw"></div>
+    <div class="setuprow">
+      <button id="btnstart">Start position</button>
+      <button id="btnundo">&#8592; Undo</button>
+      <button id="btnredo">Redo &#8594;</button>
+      <button id="btnsetup">Setup mode</button>
+    </div>
+    <div id="setup" style="display:none">
+      <div class="setuprow" id="palette"></div>
+      <div class="setuprow">
+        Hands: <span id="handedit"></span>
+      </div>
+      <div class="setuprow">
+        <button id="btnstm">Side to move: white</button>
+        <button id="btnclear">Clear board</button>
+        <button id="btndone">Done &#10003;</button>
+      </div>
+    </div>
+    <div class="setuprow" style="margin-top:8px">
+      <input id="tfen" spellcheck="false">
+      <button id="btnload">Load</button>
+    </div>
+  </div>
+  <div>
+    <div class="panel">
+      <h2>Evaluation</h2>
+      <div id="evalbig">…</div>
+      <div class="muted" id="evalsub"></div>
+      <div style="margin-top:8px">
+        depth <select id="depth"></select>
+        <button id="btnline">&#9654; Play best line</button>
+      </div>
+      <div class="muted" id="stats"></div>
+    </div>
+    <div class="panel">
+      <h2>Moves <span class="muted">(white-view values)</span></h2>
+      <table id="moves"></table>
+    </div>
+    <div class="panel">
+      <h2>History</h2>
+      <div id="history"></div>
+    </div>
+  </div>
+</div>
+<div class="modal" id="promo" style="display:none"><div class="inner"></div></div>
+<script>
+const IMG = (color, t) => `/pieces/${color ? "b" : "w"}${t}.svg`;
+const START = "fuwk/3p/P3/KWUF[-] w";
+const FILES = "abcd";
+let state = { tfen: START, info: null, sel: null, handSel: null,
+              hist: [START], histAt: 0, setup: false,
+              board: null, hands: null, stm: "w", pal: null, playing: false };
+
+const $ = id => document.getElementById(id);
+const sqName = i => FILES[i % 4] + (Math.floor(i / 4) + 1);
+
+function fmtVal(v, snd) {
+  if (v > 29000) return {t: `White wins in ${30000 - v}`, s: "forced (proven)"};
+  if (v < -29000) return {t: `Black wins in ${30000 + v}`, s: "forced (proven)"};
+  const proven = snd === 3 ? "exact at this depth" : "no forced win within horizon";
+  return {t: v === 0 ? "0.00" : (v > 0 ? "+" : "") + v, s: proven};
+}
+
+async function api(path, params) {
+  const r = await fetch(path + "?" + new URLSearchParams(params));
+  const j = await r.json();
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+
+function renderBoard() {
+  const b = $("board"); b.innerHTML = "";
+  for (let r = 3; r >= 0; r--) for (let f = 0; f < 4; f++) {
+    const i = r * 4 + f;
+    const d = document.createElement("div");
+    d.className = "sq " + ((r + f) % 2 ? "light" : "dark");
+    d.dataset.sq = i;
+    d.innerHTML = `<span class="coord">${sqName(i)}</span>`;
+    const pc = state.board[i];
+    if (pc) {
+      const s = document.createElement("img");
+      s.className = "piece";
+      s.src = IMG(pc[1], pc[0]);
+      s.draggable = !state.setup;
+      s.addEventListener("dragstart", ev => { onSelect(i); ev.dataTransfer.setData("text", "sq:" + i); });
+      d.appendChild(s);
+      if (pc[2]) { const pm = document.createElement("span"); pm.className = "pmark"; pm.textContent = "~"; d.appendChild(pm); }
+    }
+    if (state.sel === i) d.classList.add("sel");
+    if (state.sel !== null && targetsOf(state.sel).has(i)) {
+      d.classList.add("tgt"); if (pc) d.classList.add("occ");
+    }
+    if (state.handSel && !pc && dropTargets(state.handSel).has(i)) d.classList.add("tgt");
+    d.addEventListener("click", () => onSquareClick(i));
+    d.addEventListener("dragover", ev => ev.preventDefault());
+    d.addEventListener("drop", ev => { ev.preventDefault(); onDropEvent(ev, i); });
+    b.appendChild(d);
+  }
+  for (const color of ["w", "b"]) {
+    const el = $("hand" + color); el.innerHTML = "";
+    const h = state.hands[color];
+    "PFUW".split("").forEach((t, ti) => {
+      if (!h[ti]) return;
+      const s = document.createElement("span");
+      s.className = "hp" + (state.handSel && state.handSel[0] === color && state.handSel[1] === t ? " sel" : "");
+      s.innerHTML = `<img src="${IMG(color === "b" ? 1 : 0, t)}">` + (h[ti] > 1 ? `<span class="cnt">x${h[ti]}</span>` : "");
+      s.draggable = true;
+      s.addEventListener("dragstart", ev => { onHandSelect(color, t); ev.dataTransfer.setData("text", "hand:" + color + t); });
+      s.addEventListener("click", () => onHandSelect(color, t));
+      el.appendChild(s);
+    });
+  }
+}
+
+function movesFrom(sq) {
+  const pre = sqName(sq);
+  return Object.keys(state.info.moves).filter(m => !m.includes("@") && m.startsWith(pre));
+}
+function targetsOf(sq) {
+  return new Set(movesFrom(sq).map(m => {
+    const t = m.split("=")[0].slice(2, 4);
+    return FILES.indexOf(t[0]) + (t[1] - 1) * 4;
+  }));
+}
+function dropTargets(hs) {
+  const pfx = hs[1] + "@";
+  return new Set(Object.keys(state.info.moves).filter(m => m.startsWith(pfx))
+    .map(m => FILES.indexOf(m[2]) + (m[3] - 1) * 4));
+}
+
+function onSelect(i) {
+  if (state.setup) return;
+  state.handSel = null;
+  state.sel = movesFrom(i).length ? i : null;
+  renderBoard();
+}
+function onHandSelect(color, t) {
+  if (state.setup) return;
+  if (color !== state.info.stm) return;
+  state.sel = null;
+  state.handSel = [color, t];
+  renderBoard();
+}
+function onSquareClick(i) {
+  if (state.setup) { setupPlace(i); return; }
+  if (state.handSel && dropTargets(state.handSel).has(i)) { playMove(state.handSel[1] + "@" + sqName(i)); return; }
+  if (state.sel !== null && targetsOf(state.sel).has(i)) { tryMove(state.sel, i); return; }
+  onSelect(i);
+}
+function onDropEvent(ev, i) {
+  const d = ev.dataTransfer.getData("text");
+  if (d.startsWith("sq:")) { const from = +d.slice(3); if (targetsOf(from).has(i)) tryMove(from, i); }
+  else if (d.startsWith("hand:")) {
+    const hs = [d[5], d[6]];
+    if (hs[0] === state.info.stm && dropTargets(hs).has(i)) playMove(hs[1] + "@" + sqName(i));
+  }
+}
+function tryMove(from, to) {
+  const base = sqName(from) + sqName(to);
+  const cands = Object.keys(state.info.moves).filter(m => m.split("=")[0] === base);
+  if (cands.length === 1) playMove(cands[0]);
+  else if (cands.length > 1) {
+    const inner = document.querySelector("#promo .inner"); inner.innerHTML = "";
+    for (const c of cands) {
+      const s = document.createElement("img");
+      s.src = IMG(state.info.stm === "b" ? 1 : 0, c.split("=")[1]);
+      s.onclick = () => { $("promo").style.display = "none"; playMove(c); };
+      inner.appendChild(s);
+    }
+    $("promo").style.display = "flex";
+  }
+}
+function playMove(m) {
+  const next = state.info.moves[m];
+  const moves = (state.hist.moves || []).slice(0, state.histAt).concat([m]);
+  state.hist = state.hist.slice(0, state.histAt + 1).concat([next]);
+  state.hist.moves = moves;
+  state.histAt++;
+  return load(next);
+}
+
+function renderHistory() {
+  const h = $("history"); h.innerHTML = "";
+  (state.hist.moves || []).forEach((m, i) => {
+    const s = document.createElement("span");
+    s.textContent = (i % 2 === 0 ? (i / 2 + 1) + "." : "") + m;
+    s.className = i === state.histAt - 1 ? "cur" : "";
+    s.onclick = () => { state.histAt = i + 1; load(state.hist[i + 1]); };
+    h.appendChild(s);
+  });
+}
+
+let analyzeSeq = 0;
+async function analyze() {
+  const seq = ++analyzeSeq;
+  $("evalbig").textContent = "…"; $("evalsub").textContent = ""; $("stats").textContent = "";
+  $("moves").innerHTML = "";
+  const depth = +$("depth").value;
+  try {
+    const a = await api("/api/analyze", {tfen: state.tfen, depth});
+    if (seq !== analyzeSeq) return;
+    const f = fmtVal(a.value, a.snd);
+    $("evalbig").textContent = f.t;
+    $("evalsub").textContent = f.s + (a.best ? " — best: " + a.best : "");
+    $("stats").textContent = `depth ${a.depth} · ${a.nodes.toLocaleString()} nodes · ${a.time}s` + (a.cached ? " · cached" : "");
+    const tbl = $("moves");
+    for (const mv of a.moves) {
+      const tr = document.createElement("tr");
+      const fv = fmtVal(mv.value, 0);
+      tr.innerHTML = `<td>${mv.move}</td><td>${fv.t}</td>`;
+      tr.onclick = () => playMove(mv.move);
+      tbl.appendChild(tr);
+    }
+  } catch (e) { if (seq === analyzeSeq) $("evalbig").textContent = "error: " + e.message; }
+}
+
+async function load(tfen) {
+  try {
+    const info = await api("/api/position", {tfen});
+    state.tfen = tfen; state.info = info; state.sel = null; state.handSel = null;
+    state.board = info.board; state.hands = {w: info.hands.w, b: info.hands.b}; state.stm = info.stm;
+    $("tfen").value = tfen;
+    renderBoard(); renderHistory();
+    if (info.result !== null) {
+      const stmName = info.stm === "w" ? "White" : "Black";
+      $("evalbig").textContent = info.result === -1 ? `${stmName} is checkmated` : `${stmName} is stalemated and WINS`;
+      $("evalsub").textContent = "game over"; $("moves").innerHTML = ""; $("stats").textContent = "";
+      analyzeSeq++;
+    } else analyze();
+  } catch (e) { alert("Bad position: " + e.message); }
+}
+
+$("btnline").onclick = async () => {
+  if (state.playing) { state.playing = false; return; }
+  state.playing = true; $("btnline").textContent = "■ Stop";
+  try {
+    const seen = new Set();
+    for (let i = 0; i < 60 && state.playing; i++) {
+      if (state.info.result !== null || seen.has(state.tfen)) break;
+      seen.add(state.tfen);
+      const a = await api("/api/analyze", {tfen: state.tfen, depth: +$("depth").value});
+      if (!a.best || !state.playing) break;
+      await playMove(a.best);
+      await new Promise(r => setTimeout(r, 400));
+    }
+  } finally { state.playing = false; $("btnline").textContent = "▶ Play best line"; }
+};
+
+/* ---------- setup mode ---------- */
+const PAL = ["K","F","U","W","P","k","f","u","w","p","✕"];
+function renderSetup() {
+  const p = $("palette"); p.innerHTML = "";
+  PAL.forEach(c => {
+    const s = document.createElement("span");
+    s.className = "pal" + (state.pal === c ? " sel" : "");
+    s.innerHTML = c === "✕" ? "✕" : `<img src="${IMG(c === c.toLowerCase() ? 1 : 0, c.toUpperCase())}">`;
+    s.title = c;
+    s.onclick = () => { state.pal = c; renderSetup(); };
+    p.appendChild(s);
+  });
+  const he = $("handedit"); he.innerHTML = "";
+  for (const color of ["w", "b"]) "PFUW".split("").forEach((t, ti) => {
+    const s = document.createElement("span");
+    s.innerHTML = ` <img src="${IMG(color === "b" ? 1 : 0, t)}" style="height:22px;vertical-align:middle">${state.hands[color][ti]} `;
+    const plus = document.createElement("button"); plus.textContent = "+";
+    plus.onclick = () => { if (state.hands[color][ti] < 2) state.hands[color][ti]++; renderSetup(); };
+    const minus = document.createElement("button"); minus.textContent = "-";
+    minus.onclick = () => { if (state.hands[color][ti] > 0) state.hands[color][ti]--; renderSetup(); };
+    s.appendChild(minus); s.appendChild(plus);
+    he.appendChild(s);
+  });
+}
+function setupPlace(i) {
+  if (!state.pal) return;
+  if (state.pal === "✕") state.board[i] = null;
+  else state.board[i] = [state.pal.toUpperCase(), state.pal === state.pal.toLowerCase() ? 1 : 0, false];
+  renderBoard();
+}
+function buildTfen() {
+  let ranks = [];
+  for (let r = 3; r >= 0; r--) {
+    let row = "", run = 0;
+    for (let f = 0; f < 4; f++) {
+      const pc = state.board[r * 4 + f];
+      if (!pc) { run++; continue; }
+      if (run) { row += run; run = 0; }
+      row += (pc[1] ? pc[0].toLowerCase() : pc[0]) + (pc[2] ? "~" : "");
+    }
+    if (run) row += run;
+    ranks.push(row);
+  }
+  let hand = "";
+  "PFUW".split("").forEach((t, ti) => hand += t.repeat(state.hands.w[ti]));
+  "PFUW".split("").forEach((t, ti) => hand += t.toLowerCase().repeat(state.hands.b[ti]));
+  return ranks.join("/") + "[" + (hand || "-") + "] " + state.stm;
+}
+$("btnsetup").onclick = () => {
+  state.setup = !state.setup;
+  $("setup").style.display = state.setup ? "block" : "none";
+  $("btnsetup").textContent = state.setup ? "Cancel setup" : "Setup mode";
+  if (state.setup) renderSetup();
+  else load(state.tfen);
+};
+$("btnstm").onclick = () => { state.stm = state.stm === "w" ? "b" : "w"; $("btnstm").textContent = "Side to move: " + (state.stm === "w" ? "white" : "black"); };
+$("btnclear").onclick = () => { state.board = Array(16).fill(null); state.hands = {w:[0,0,0,0], b:[0,0,0,0]}; renderBoard(); renderSetup(); };
+$("btndone").onclick = () => {
+  state.setup = false; $("setup").style.display = "none"; $("btnsetup").textContent = "Setup mode";
+  state.hist = [buildTfen()]; state.hist.moves = []; state.histAt = 0;
+  load(buildTfen());
+};
+$("btnstart").onclick = () => { state.hist = [START]; state.hist.moves = []; state.histAt = 0; load(START); };
+$("btnundo").onclick = () => { if (state.histAt > 0) { state.histAt--; load(state.hist[state.histAt]); } };
+$("btnredo").onclick = () => { if (state.histAt < state.hist.length - 1) { state.histAt++; load(state.hist[state.histAt]); } };
+$("btnload").onclick = () => { const t = $("tfen").value.trim(); state.hist = [t]; state.hist.moves = []; state.histAt = 0; load(t); };
+$("depth").innerHTML = [8,10,12,14,16,18,20,22].map(d => `<option ${d===14?"selected":""}>${d}</option>`).join("");
+$("depth").onchange = analyze;
+
+api("/api/status", {}).then(s => {
+  if (s.summary) $("status").textContent = "Solve status: " + s.summary;
+}).catch(() => {});
+load(START);
+</script>
+</body>
+</html>

@@ -3,3 +3,4 @@ __pycache__/
 *.dylib
 *.so
 *.pyc
+analysis.sqlite
