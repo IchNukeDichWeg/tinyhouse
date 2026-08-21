@@ -25,6 +25,13 @@ int th_moves(THPos *p, uint16_t *out);
 void th_make(THPos *p, uint16_t m);
 int th_result(THPos *p);
 uint64_t th_perft(THPos *p, int depth);
+uint64_t th_key(const THPos *p);
+void th_tt_init(int log2_entries);
+uint64_t th_nodes(void);
+int th_search(THPos *p, int depth, uint16_t *bestmove);
+int th_solve(THPos *p, int depth, uint16_t *bestmove, int *snd);
+int th_mate_hunt(THPos *p, int depth, int color, uint16_t *bestmove);
+int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values);
 """)
 lib = ffi.dlopen(str(_LIB))
 lib.th_init()
