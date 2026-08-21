@@ -4,3 +4,4 @@ __pycache__/
 *.so
 *.pyc
 analysis.sqlite
+solve_state/
