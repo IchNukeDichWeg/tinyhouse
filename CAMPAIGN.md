@@ -109,7 +109,6 @@ line per item.
 | TH-10 | incremental Zobrist key | **CONFIRMED** |
 | TH-12 | hoist `king_sq` out of the legality loop | **CONFIRMED** |
 | TH-11 | fast legality (perft/`th_moves` half only) | **CONFIRMED** |
-| TH-16 | prune drops that cannot resolve a check | PENDING |
 | TH-15 | staged movegen: TT move before the full list | PENDING |
 | TH-14 | bitboard movegen and `attacked()` | PENDING |
 
@@ -117,6 +116,7 @@ line per item.
 
 | ID | Item | Status |
 |---|---|---|
+| TH-16 | prune drops that cannot resolve a check (**reclassified from tier 4**: node-changing) | **REJECTED** |
 | TH-13 | credit the symmetric `SND_LB` in mate-distance pruning | PENDING |
 | TH-39 | the `--tt 26` default is unmeasured | PENDING |
 | TH-17 | enemy-king-proximity bonus for quiet drops | PENDING |

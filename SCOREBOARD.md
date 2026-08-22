@@ -81,6 +81,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 48 | TH-10 | 4 | **CONFIRMED** | +7.92% solve d14, +7.44/+7.47% hunt d16, +3.78% drop-heavy, perft +0.34% (no regression); KEY_PARANOIA clean over 123M nodes incl. SMP | see below |
 | 49 | TH-12 | 4 | **CONFIRMED** | +10.16% perft(7), +39.56% drop-heavy perft, +2.53% solve d14, +2.95% hunt d16 vs controls under 0.4%; node-identical | see below |
 | 50 | TH-11 | 4 | **CONFIRMED** | perft +28.46% start, +110.83% drop-heavy; inside search -0.78%/-0.68% so shipped OFF there; perft equivalence checked on 8 positions incl. 3 promoted-mao | see below |
+| 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1274,3 +1275,39 @@ only expose the mover's own king by moving the king, by being made while
 already in check, or by vacating the leg square of an enemy mao aimed at the
 king. A capture cannot open a line, because the captured square stays occupied
 by the capturer.
+
+### TH-16 · prune drops that cannot resolve a check — the Class A form REJECTED, item reclassified
+
+Built and measured, then reverted. The item promises perft identity "because
+every pruned drop was illegal anyway", and that half is true -- `perft(7)` and
+the drop-heavy perft both matched exactly. What is not true is that it pays.
+
+**Perft / `th_moves` form (Class A, node-identical), measured:**
+
+| workload | control | TH-16 | verdict |
+|---|---|---|---|
+| perft(7), start | +0.67% | +0.41% | **NULL** |
+| perft(6), `3k/1U2/4/K3[f] b` (a mao check with one blocking drop) | +1.10% | **-1.33%** | **loss** |
+
+It is a small **loss on the exact position it targets**. In-check nodes are a
+small minority, the drop section it skips was already cheap, and
+`check_block_square` has to walk `ORTH`, `DIAG`, `PCAPS` and `MAO_ATT` to find
+out whether it may skip anything.
+
+**And the search form is not node-identical, which is the finding that matters.**
+Applying it inside `search()` moved node counts by up to **+7.28%** and
+**-5.63%** on individual regression rows and changed the digest --
+`811f304f1eef7998` against `651da0519b02a4b7` -- with two positions returning a
+different best move. The cause is tie-breaking: `order_score` produces ties
+(equal history, typically 0), the selection sort takes the first index holding
+the maximum, and removing entries from the list changes which index that is.
+So the shortcut reorders tied legal moves.
+
+That is a **Class B change**, and the campaign's own rule -- if you cannot tell,
+it is Class B -- puts it in tier 5, not tier 4. It measured **+7.91% with 1.7%
+fewer nodes** on hunt d16 in passing, which is worth taking seriously, so the
+item is reclassified rather than killed, and gets measured properly on
+nodes-to-depth there.
+
+**The regression harness earned its keep here.** The node identity claim was
+mine, it was wrong, and the harness said so before the change could ship.
