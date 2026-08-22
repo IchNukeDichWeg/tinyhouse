@@ -78,6 +78,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | `94ea4f2` |
 | 46 | TH-08 | 4 | **CONFIRMED** | +4.04% solve d14, +3.69/+3.93% hunt d16 vs a 0.2-0.4% control; NULL on drop-heavy; node-identical | see below |
 | 47 | TH-09 | 4 | **CONFIRMED** | +5.24% solve d14, +5.56/+5.15% hunt d16, +6.06% drop-heavy vs 0.0-0.8% controls; perft +1.00% (reported 1.071x); node-identical | see below |
+| 48 | TH-10 | 4 | **CONFIRMED** | +7.92% solve d14, +7.44/+7.47% hunt d16, +3.78% drop-heavy, perft +0.34% (no regression); KEY_PARANOIA clean over 123M nodes incl. SMP | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1164,3 +1165,46 @@ The search figures do broadly hold up (reported 1.063x / 1.087x, measured
 its own gated loop and NOT accumulated inside the piece loop, which already
 walks all 16 squares and looks like the better place for it. That variant was
 reported 6.5% slower and was not re-litigated here.
+
+### TH-10 · incremental Zobrist key — CONFIRMED, and the reported downside designed out
+
+Node-identical; digest unchanged.
+
+| workload | control | TH-10 | verdict |
+|---|---|---|---|
+| solve d14, start | -0.11% | **+7.92%** | signal |
+| hunt d16, start | +0.05% | **+7.44%** | signal |
+| hunt d16, start (second session) | +0.02% | **+7.47%** | signal |
+| solve d12, drop-heavy | -0.24% | **+3.78%** | signal |
+| perft(7), start | +0.14% | +0.34% | neutral |
+
+**The backlog's "omitted downside" is designed out rather than accepted.** It
+reports perft(8) at 0.955x -- a 4.7% loss -- because make/unmake would maintain
+a key that perft and `th_moves` never read, and says avoiding it needs two
+make() variants that no report budgeted for. Threading the key through
+`search()` as a parameter instead costs those callers **nothing**: perft
+measures **+0.34%**, neutral, and no second make() variant exists.
+
+**Both reported traps are disposed of by the same choice.** There is no shared
+"current key" to go stale, so the SMP trap cannot occur -- the main thread and
+every helper call `th_key()` for their own root. And the hand-count update does
+use **two** xors, because `th_key` xors `zob_hand` for every count including 0.
+
+**Soundness checked, not argued.** A `KEY_PARANOIA` build asserts
+`key == th_key(p)` at every node. Under it: the whole regression harness
+(6,476,533 nodes, digest unchanged), all three published proofs at their exact
+distances, the depth-100 draw proof (117M nodes), and a 4-worker SMP hunt --
+**zero mismatches**. The toggle ships at 0 and is one line to flip.
+
+Toggle-off measures +0.24% against the original tree: a clean pin.
+
+### Tier 4 cumulative after TH-08, TH-09, TH-10
+
+| workload | tier-4 start | now | control |
+|---|---|---|---|
+| hunt d16, start | 3.033s | **2.594s** | +0.10% |
+| solve d14, start | 0.427s | **0.366s** | -0.66% |
+
+**+16.9% on both**, node-identical throughout (9,616,663 and 1,319,149 on every
+arm). The three individual gains multiply to 1.175 against a measured 1.169,
+which is the consistency check that they are independent and really additive.

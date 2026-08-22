@@ -338,6 +338,42 @@ uint64_t th_key(const THPos *p) {
     return k;
 }
 
+/* TH-10: the key for a child node, computed from the parent's key and the move
+ * instead of rescanning 16 squares and 8 hand counts.
+ *
+ * Deliberately NOT done inside make()/unmake(). The obvious placement makes
+ * perft and th_moves pay for a key they never read - the backlog measured
+ * perft(8) at 0.955x, a 4.7% LOSS - and avoiding that needs two make()
+ * variants. Threading the key through search() as a parameter costs those
+ * callers nothing at all, and it also disposes of the reported SMP trap by
+ * construction: there is no shared "current key" to go stale, because every
+ * root (main thread and every helper) computes its own with th_key().
+ *
+ * A hand count needs TWO xors, not one: th_key xors zob_hand for every count
+ * including 0, so moving from c to c-1 must remove c and add c-1. */
+#define INCREMENTAL_KEY 1
+#define KEY_PARANOIA 0        /* 1 = assert the incremental key at every node */
+
+static uint64_t key_after(const THPos *p, uint16_t m, uint64_t key) {
+    int us = p->stm, to = M_TO(m);
+    key ^= zob_stm;
+    if (M_IS_DROP(m)) {
+        int t = M_FROM(m), c = p->hands[us][t];
+        key ^= zob_piece[to][PIECE(us, t, 0)];
+        key ^= zob_hand[us][t][c] ^ zob_hand[us][t][c - 1];
+        return key;
+    }
+    int frm = M_FROM(m), cap = p->board[to], pc = p->board[frm];
+    key ^= zob_piece[frm][pc];
+    if (cap) {
+        int ct = PROMOTED(cap) ? P : TYPE(cap), c = p->hands[us][ct];
+        key ^= zob_piece[to][cap];
+        key ^= zob_hand[us][ct][c] ^ zob_hand[us][ct][c + 1];
+    }
+    key ^= zob_piece[to][M_PROMO(m) ? PIECE(us, M_PROMO(m), 1) : pc];
+    return key;
+}
+
 /* TT entry: data packs value(16) | move(16) | depth(8) | flag(4) | sound(4);
  * xkey = key ^ data. calloc zero-fill never validates against a real key. */
 typedef struct { _Atomic uint64_t xkey; _Atomic uint64_t data; } TTEntry;
@@ -598,7 +634,7 @@ static int horizon_has_move(THPos *p, int in_check) {
     return 0;
 }
 
-static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) {
+static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, uint64_t key) {
     si->rep_min = MAXPLY;
     si->snd = 0;
     si->best = 0;
@@ -610,7 +646,11 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) 
     if (beta > MATE - ply) beta = MATE - ply;
     if (alpha >= beta) { si->snd = alpha == MATE - ply ? SND_UB : 0; return alpha; }
 
-    uint64_t key = th_key(p);
+#if !INCREMENTAL_KEY
+    key = th_key(p);
+#elif KEY_PARANOIA
+    if (key != th_key(p)) { fprintf(stderr, "incremental key mismatch at ply %d\n", ply); abort(); }
+#endif
     for (int j = ply - 2; j >= 0; j -= 2)
         if (path[j] == key) { si->rep_min = j; si->snd = SND_LB | SND_UB; return 0; }
     if (ply >= MAXPLY - 2) return 0;
@@ -660,11 +700,12 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) 
         int bi = i;
         for (int j = i + 1; j < n; j++) if (scores[j] > scores[bi]) bi = j;
         uint16_t m = buf[bi]; buf[bi] = buf[i]; scores[bi] = scores[i]; buf[i] = m;
+        uint64_t ckey = key_after(p, m, key);      /* before make: reads the pre-move board */
         make(p, m, &u);
         if (th_in_check(p, 1 - p->stm)) { unmake(p, &u); continue; }
         any = 1;
         SInfo ci;
-        int v = -search(p, depth - 1, ply + 1, -beta, -alpha, &ci);
+        int v = -search(p, depth - 1, ply + 1, -beta, -alpha, &ci, ckey);
         unmake(p, &u);
         if (ci.rep_min < my_rep) my_rep = ci.rep_min;
         if (!(ci.snd & SND_LB)) all_children_lb = 0;
@@ -725,7 +766,7 @@ static void *helper_main(void *v) {
     HelperArg *a = v;
     tl_jitter = 0x9E3779B9u * (atomic_fetch_add(&g_tid, 1) + 1);
     SInfo si;
-    search(&a->pos, a->depth, 0, a->alpha, a->beta, &si);
+    search(&a->pos, a->depth, 0, a->alpha, a->beta, &si, th_key(&a->pos));
     nodes_flush();
     return 0;
 }
@@ -750,7 +791,7 @@ static int root_search(THPos *p, int depth, int alpha, int beta, int workers,
         pthread_create(&th[i], 0, helper_main, &args[i]);
     }
     SInfo si;
-    int v = search(p, depth, 0, alpha, beta, &si);
+    int v = search(p, depth, 0, alpha, beta, &si, th_key(p));
     g_abort = 1;
     for (int i = 0; i < nh; i++) pthread_join(th[i], 0);
     g_abort = 0;
@@ -823,9 +864,10 @@ int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values, int
     uint64_t rootkey = th_key(p);
     for (int i = 0; i < n; i++) {
         path[0] = rootkey;
+        uint64_t ckey = key_after(p, buf[i], rootkey);
         make(p, buf[i], &u);
         SInfo si;
-        int v = -search(p, depth - 1, 1, -MATE, MATE, &si);
+        int v = -search(p, depth - 1, 1, -MATE, MATE, &si, ckey);
         unmake(p, &u);
         out_moves[i] = buf[i]; out_values[i] = v;
         if (out_snd)
