@@ -95,7 +95,7 @@ line per item.
 | TH-30 | test the Zobrist reseed contract | **CONFIRMED** |
 | TH-24 | extend the Python/C parity walk beyond the start position | **CONFIRMED** |
 | TH-23 | pin `attacked()` against an independent geometric oracle | **CONFIRMED** |
-| TH-29 | pin a draw-by-repetition proof | PENDING |
+| TH-29 | pin a draw-by-repetition proof | **CONFIRMED** |
 | TH-26 | test the `solve_hunt` resume/checkpoint round trip | **CONFIRMED** |
 | TH-33 | cross-check `state_count.py`, delete its dead stub | **CONFIRMED** |
 | TH-25 | assert published perft counts on the symmetry orbit | PENDING |

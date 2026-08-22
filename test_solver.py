@@ -593,3 +593,40 @@ def test_state_count_cross_check_and_headline():
     assert "17,669,515,462,968" in r.stdout
     assert "4,417,378,865,742" in r.stdout
     assert "17,669,515,462,968" in (DIR / "RULES.md").read_text()
+
+
+@pytest.mark.slow
+def test_a_draw_can_be_proven(tt):
+    """TH-29: the engine's ability to prove a DRAW, which nothing exercised.
+
+    The backlog found 0 proven draws in 3,613 positions and concluded that a
+    hand-crafted position was needed. It is not the position that was missing,
+    it is the DEPTH. A draw proof needs every line to reach a terminal or a
+    repetition before the horizon, and the only terminal-free component in
+    reach is bare kings -- 312 states, being the 156 non-adjacent ordered king
+    pairs times two sides to move. Lines in it are long, so the proof arrives
+    around depth 90-100 and not at 14.
+
+    Measured on 4/4/4/K2k[-] w: snd 0 through depth 74, snd 2 at 76 and 78,
+    and exact at 80. The cheapest root found is the one used here: depth 100,
+    ~117M nodes, ~7s. Marked slow for that reason.
+    """
+    bm, snd = tt.ffi.new("uint16_t *"), tt.ffi.new("int *")
+    tt.lib.th_tt_init(24)
+    tt.lib.th_clear_history()
+    v = tt.lib.th_solve(tt.to_c(T.Position.from_tfen("2K1/4/4/2k1[-] w")), 100, bm, snd)
+    assert (v, snd[0]) == (0, 3), "bare kings must be a PROVEN draw at this depth"
+
+
+@pytest.mark.slow
+def test_a_shallow_search_does_not_claim_the_draw(tt):
+    """The other half, and the one that makes the test above non-vacuous: at
+    depths the project actually runs, the same position is unproven. An engine
+    that returned snd == 3 everywhere would pass the test above and be wrong.
+    """
+    bm, snd = tt.ffi.new("uint16_t *"), tt.ffi.new("int *")
+    for depth in (14, 40):
+        tt.lib.th_tt_init(22)
+        tt.lib.th_clear_history()
+        v = tt.lib.th_solve(tt.to_c(T.Position.from_tfen("2K1/4/4/2k1[-] w")), depth, bm, snd)
+        assert v == 0 and snd[0] != 3, (depth, snd[0])

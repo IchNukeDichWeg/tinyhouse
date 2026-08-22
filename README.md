@@ -32,6 +32,10 @@ python3 -m venv .venv && .venv/bin/pip install pytest cffi
 .venv/bin/python -m pytest -q
 ```
 
+A couple of proofs cost seconds rather than milliseconds (the draw proof needs
+depth 100) and are excluded from that default run. `pytest -q -m slow` runs only
+those; `pytest -q -m ""` runs everything.
+
 ## GUI
 
 ```bash
@@ -51,7 +55,11 @@ The game is **not solved**. What is proven so far (machine-readable in
 - no forced **White** win within **20 plies** (729M nodes)
 - no forced **Black** win within **22 plies** (303M nodes)
 
-so the game value is still open, consistent with the draw its reception suggests.
+so the game value is still open, consistent with the draw its reception suggests. The
+engine **can** prove a draw, which was previously believed out of reach: bare kings
+(`2K1/4/4/2k1[-] w`) come back `value 0, snd 3` — an exact, proven game value — at
+depth 100. It is depth and not position that was missing; the only terminal-free
+component within reach is the 312-state bare-kings one, and its lines are long.
 Genuine forced wins ARE proven and shown when they are in range, e.g. `1.Fd1-c2??`
 loses by force: `1...Uxc2 2.Wb2 F@a3 3.Wxc2 dxc2 4.U@b3 Kd3 5.Uxd2 W@b1#` (mate in 9).
 

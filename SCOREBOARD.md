@@ -74,6 +74,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 41 | TH-23 | 3 | **CONFIRMED** | 94,624 comparisons, 0 mismatches; catches 3 of 3 planted geometry bugs | see below |
 | 42 | TH-26 | 3 | **CONFIRMED** | resume, --fresh and build-mismatch paths all pinned by subprocess | see below |
 | 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | see below |
+| 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1012,3 +1013,51 @@ the file: the group acts **freely** here, so `total/4` is exact. The file mirror
 fixes no square (a<->d, b<->c, no central file), so the white king can never map
 to itself, and sigma maps white pieces to black ones. No correction is needed
 or correct.
+
+### TH-29 · pin a draw-by-repetition proof — and the backlog's premise is wrong
+
+The item says a hand-crafted position where no line reaches the horizon is
+required, on the evidence that 3,613 low-material positions searched to depth
+14 produced **zero** proven draws. **It is not the position that was missing.
+It is the depth.**
+
+**Why, measured before searching for one.** A draw proof needs every line to
+reach a terminal or a repetition before the horizon, so it needs a
+**terminal-free** closed component. 400 random low-material roots, closure
+computed exactly with a 3,000-state cap:
+
+| | |
+|---|---|
+| closure computable at all | 169 of 400 |
+| terminal-free components among them | **169 of 169** |
+| distinct component sizes seen | **312, and only 312** |
+| terminal-free AND small enough (<= 60 states) to search cheaply | **0** |
+
+Every terminal-free component is the same one: bare kings, **312 states**,
+which is 156 non-adjacent ordered king pairs times two sides to move -- an
+independent confirmation of `state_count.py`'s king-pair term, arrived at by
+graph search rather than by combinatorics. Everything with material has a
+terminal on some line, so its value is a win or a loss, not a draw.
+
+**The proof exists.** `4/4/4/K2k[-] w`, one process, fresh table each depth:
+
+| depth | 8-74 | 76, 78 | **80** |
+|---|---|---|---|
+| snd | 0 | 2 | **3** |
+
+`v = 0, snd = SND_LB\|SND_UB` -- the code's own encoding of an exact game value.
+335M nodes, 19.5s. The node curve is why depth 14 never had a chance: it grows
+x3.6 per 4 plies to depth 40 and then **flattens to x1.0-1.1** by depth 64 as
+repetition closes the component off, which is the shape of a search running out
+of new states rather than one exploding.
+
+Seven bare-king roots were then measured for the cheapest exact proof;
+`2K1/4/4/2k1[-] w` at depth 100 costs 117M nodes and **6.9s**, and that is what
+the test uses. Marked `slow` and excluded from the default `pytest -q`, with
+the counterpart test asserting the same position is **not** proven at depths 14
+and 40 -- without which an engine returning `snd == 3` everywhere would pass.
+
+This also corrects the merge's own note on TH-36: "cannot prove a draw at any
+depth at which any line still reaches the horizon" is right, and the honest
+addition is that such a depth is reachable today for bare kings. It is
+nowhere near reachable for the start position, which is what df-pn is for.
