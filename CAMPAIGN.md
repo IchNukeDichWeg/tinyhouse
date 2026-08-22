@@ -133,6 +133,6 @@ line per item.
 
 | ID | Item | Status |
 |---|---|---|
-| TH-45 | history numbering inverted for the whole game | PENDING |
-| TH-46 | no check indicator of any kind | PENDING |
-| TH-47 | `/pieces/` hardcodes `image/svg+xml` | PENDING |
+| TH-45 | history numbering inverted for the whole game | **CONFIRMED** |
+| TH-46 | no check indicator of any kind | **CONFIRMED** |
+| TH-47 | `/pieces/` hardcodes `image/svg+xml` | **CONFIRMED** |

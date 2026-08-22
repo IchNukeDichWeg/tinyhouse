@@ -28,11 +28,17 @@ def srv(tmp_path):
         url = f"http://127.0.0.1:{httpd.server_address[1]}{path}"
         if params:
             url += "?" + urllib.parse.urlencode(params)
+        def body(raw):
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                return raw          # /, /pieces/*: not JSON routes
+
         try:
             with urllib.request.urlopen(url, timeout=60) as r:
-                return r.status, json.loads(r.read())
+                return r.status, body(r.read())
         except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read())
+            return e.code, body(e.read())
 
     get.module = server
     yield get
@@ -352,3 +358,44 @@ def test_each_root_move_carries_its_own_soundness(srv):
 
     page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
     assert "fmtVal(mv.value, mv.snd)" in page
+
+
+def test_position_info_reports_check_and_checking_moves(srv):
+    """TH-46: in_check was computed, serialised and read by nothing.
+
+    move_str cannot append '+' -- a move string says nothing about the position
+    it lands in -- so checking moves come back as a separate list, leaving the
+    move key intact as the identity the GUI uses everywhere.
+    """
+    code, info = srv("/api/position", tfen="3k/1U2/4/K3[f] b")   # mao gives check
+    assert code == 200 and info["in_check"] is True
+    assert info["checks"] == []                                  # none of Black's replies check
+
+    code, info = srv("/api/position", tfen="3k/4/4/K1U1[-] w")   # White to move
+    assert info["in_check"] is False
+    assert info["checks"] == ["c1b3"], info["checks"]            # the mao check
+    assert all(m in info["moves"] for m in info["checks"])
+
+    page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
+    assert 'id="check"' in page and "info.checks" in page
+
+
+def test_pieces_route_requires_an_svg_suffix(srv):
+    """TH-47: the Content-Type is hardcoded, which is the right call -- guessing
+    would add a sniffing risk. What was missing is the premise that makes it
+    correct rather than incidentally correct."""
+    code, _ = srv("/pieces/wK.svg")
+    assert code in (200, 404)
+    code, err = srv("/pieces/../server.py")
+    assert code == 404
+    code, err = srv("/pieces/notasvg.txt")
+    assert code == 404
+
+
+def test_history_numbering_follows_the_starting_side(srv):
+    """TH-45: numbering was `i % 2 === 0`, which assumes a white-to-move start.
+    From a black-to-move start that inverts for the whole game, not just the
+    first move. Presence check backing browser verification."""
+    page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
+    assert "startWhite" in page
+    assert "(i % 2 === 0 ? (i / 2 + 1)" not in page

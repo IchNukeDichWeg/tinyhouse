@@ -91,6 +91,9 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 58 | TH-37 | 6 | **CONFIRMED** | plies 1-8 reproduced exactly and independently (2,036,092 cumulative, no hashing); growth ~6/ply bending to 5.09 by ply 10 | see below |
 | 59 | TH-36 | 6 | **BLOCKED** | prototype returns a wrong DISPROVED on the recorded mate in 9, so none of its diagnostics can be trusted; shipped as groundwork with a strict xfail | see below |
 | 60 | TH-38 | 6 | **CLOSED PRE-MEASUREMENT** | no material reduction in crazyhouse, so no shrinking axis; terminals are 0.03-0.16% of positions and grow 6x/ply like everything else; cannot label DRAW | see below |
+| 61 | TH-45 | 7 | **CONFIRMED** | browser-verified: black start gives 1...d3d2 / 2.a2a3, white start 1.a2a3 / d3d2 | see below |
+| 62 | TH-46 | 7 | **CONFIRMED** | browser-verified: banner, king-square highlight, and c1b3+ in the moves table | see below |
+| 63 | TH-47 | 7 | **CONFIRMED** | hardcoded type kept as the safer choice; .svg suffix now required, so it is provably correct | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1705,3 +1708,48 @@ already cheapest. A shell would buy the cheapest part of the tree.
 **And the item concedes the decisive limit itself**: a bounded retrograde can
 label WIN and LOSS but never DRAW, and the draw is the open question. It cannot
 close the claim it would be built for.
+
+---
+
+## Tier 7 — GUI
+
+All three verified in the running GUI, not just by presence checks.
+
+### TH-45 · history numbering was inverted for the whole game — CONFIRMED
+
+The numbering was `i % 2 === 0`, which assumes a white-to-move start. The
+correction in the backlog is confirmed: from a black-to-move start it inverts
+for the **entire game**, not just the first move.
+
+| start | history strip |
+|---|---|
+| black to move | `1...d3d2` · `2.a2a3` |
+| white to move | `1.a2a3` · `d3d2` |
+
+Both are correct chess convention now. No new state field was added, as the
+backlog suggests: the starting side is recoverable from `state.hist[0]`, and a
+`startStm` field would have needed resetting in three places.
+
+### TH-46 · no check indicator of any kind — CONFIRMED
+
+`in_check` was computed, serialised and read by nothing. On
+`3k/1U2/4/K3[f] b`: the banner reads **"Black is in check"**, and square 15 (d4,
+the black king) is highlighted. On a position that is not in check the banner is
+empty.
+
+The item is **under-inclusive as filed**, and that half is fixed too: `move_str`
+never appended `+` either. It cannot -- a move string says nothing about the
+position it lands in -- so `position_info` returns a separate `checks` list and
+the GUI renders the marker, leaving the move key intact as the identity used
+everywhere else. Verified: on `3k/4/4/K1U1[-] w` the moves table shows
+`a1b1 · a1a2 · a1b2 · c1a2 · c1d3 · c1b3+`, with the marker on exactly the mao
+check.
+
+### TH-47 · `/pieces/` hardcodes `image/svg+xml` — CONFIRMED, hardcode kept
+
+The backlog's own assessment is upheld: hardcoding is **safer** than guessing,
+because a wrong guess would introduce a sniffing risk the route does not
+otherwise have. So the type stays hardcoded and what was missing is added
+instead -- the route now requires a `.svg` suffix, which makes the hardcoded
+type **provably** correct rather than incidentally correct. `/pieces/foo.txt`
+is a 404, and the traversal guard the merge probed exhaustively is untouched.

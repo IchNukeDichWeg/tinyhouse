@@ -15,6 +15,8 @@
         font-size:64px; cursor:pointer; position:relative; user-select:none; }
   .sq.light { background:var(--light); } .sq.dark { background:var(--dark); }
   .sq.sel { outline:4px solid #3aa2f0; outline-offset:-4px; }
+  .sq.check { box-shadow:inset 0 0 0 4px #e0533a, inset 0 0 22px 6px rgba(224,83,58,.55); }
+  #check { color:#e0533a; font-weight:600; min-height:1.2em; }
   .sq.tgt::after { content:""; position:absolute; width:26px; height:26px; border-radius:50%;
                    background:rgba(30,120,220,.55); }
   .sq.tgt.occ::after { width:80px; height:80px; background:none; border:5px solid rgba(30,120,220,.55); }
@@ -54,6 +56,7 @@
 <body>
 <h1>Tinyhouse <span class="muted">4x4 crazyhouse — stalemated player wins</span></h1>
 <div id="status"></div>
+<div id="check"></div>
 <div class="wrap">
   <div class="boardcol">
     <div class="hand" id="handb"></div>
@@ -155,6 +158,9 @@ function renderBoard() {
       d.classList.add("tgt"); if (pc) d.classList.add("occ");
     }
     if (state.handSel && !pc && dropTargets(state.handSel).has(i)) d.classList.add("tgt");
+    // TH-46: in_check was computed, serialised and read by nothing at all.
+    if (state.info && state.info.in_check && pc && pc[0] === "K"
+        && (pc[1] ? "b" : "w") === state.info.stm) d.classList.add("check");
     d.addEventListener("click", () => onSquareClick(i));
     d.addEventListener("dragover", ev => ev.preventDefault());
     d.addEventListener("drop", ev => { ev.preventDefault(); onDropEvent(ev, i); });
@@ -259,9 +265,18 @@ function playMove(m) {
 
 function renderHistory() {
   const h = $("history"); h.innerHTML = "";
+  // TH-45: the numbering was `i % 2 === 0`, which assumes the game started with
+  // White to move. From a black-to-move start that inverts for the WHOLE game,
+  // not just the first move: every white move loses its number and every black
+  // move carries one. The starting side is already recoverable from the first
+  // history entry, so no new state field is needed (one that would have to be
+  // reset in three places).
+  const startWhite = (state.hist[0] || START).split(" ").pop() === "w";
   (state.hist.moves || []).forEach((m, i) => {
     const s = document.createElement("span");
-    s.textContent = (i % 2 === 0 ? (i / 2 + 1) + "." : "") + m;
+    const isWhite = startWhite ? i % 2 === 0 : i % 2 === 1;
+    const no = Math.floor((startWhite ? i : i + 1) / 2) + 1;
+    s.textContent = (isWhite ? no + "." : (i === 0 ? no + "..." : "")) + m;
     s.className = i === state.histAt - 1 ? "cur" : "";
     s.onclick = () => { state.histAt = i + 1; load(state.hist[i + 1]); };
     h.appendChild(s);
@@ -292,7 +307,9 @@ async function analyze() {
       // bounded value is distinguishable from "nothing found". A hardcoded 0
       // here made every row read as unproven.
       const fv = fmtVal(mv.value, mv.snd);
-      tr.innerHTML = `<td>${mv.move}</td><td>${fv.t}</td>`;
+      // ...and a move that gives check now shows it, which move_str never did
+      const chk = (state.info && state.info.checks || []).includes(mv.move) ? "+" : "";
+      tr.innerHTML = `<td>${mv.move}${chk}</td><td>${fv.t}</td>`;
       tr.title = fv.s;
       tr.onclick = () => playMove(mv.move);
       tbl.appendChild(tr);
@@ -311,6 +328,8 @@ async function load(tfen) {
     state.board = info.board; state.hands = {w: info.hands.w, b: info.hands.b}; state.stm = info.stm;
     $("tfen").value = tfen;
     renderBoard(); renderHistory();
+    $("check").textContent = info.in_check
+      ? (info.stm === "w" ? "White is in check" : "Black is in check") : "";
     if (info.result !== null) {
       const stmName = info.stm === "w" ? "White" : "Black";
       $("evalbig").textContent = info.result === -1 ? `${stmName} is checkmated` : `${stmName} is stalemated and WINS`;

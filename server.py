@@ -167,12 +167,18 @@ def analyze(tfen: str, depth: int) -> dict:
 
 def position_info(tfen: str) -> dict:
     pos = T.Position.from_tfen(tfen)
-    moves = {}
+    moves, checks = {}, []
     for m in pos.legal_moves():
         pos.make(m)
         moves[T.move_str(m)] = pos.tfen()
+        # TH-46: move_str never appends '+', and it cannot -- a move string
+        # says nothing about the position it lands in. Reported as a separate
+        # list rather than baked into the key, because the key is the move's
+        # identity everywhere in the GUI.
+        if pos.in_check(pos.stm):
+            checks.append(T.move_str(m))
         pos.unmake()
-    return {"tfen": tfen, "moves": moves, "in_check": pos.in_check(pos.stm),
+    return {"tfen": tfen, "moves": moves, "checks": checks, "in_check": pos.in_check(pos.stm),
             "result": pos.result(), "stm": "wb"[pos.stm],
             "hands": {"w": pos.hands[0], "b": pos.hands[1]},
             "board": [(T.TYPE_CHARS[T.ptype(pc)], T.pcolor(pc), T.ppromoted(pc)) if pc else None
@@ -204,7 +210,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
             elif url.path.startswith("/pieces/"):
                 f = (DIR / url.path.lstrip("/")).resolve()
-                if f.parent != (DIR / "pieces").resolve() or not f.exists():
+                # TH-47: the Content-Type below is hardcoded, and that is the
+                # right call -- guessing would introduce a sniffing risk this
+                # route does not otherwise have. What was missing is the
+                # premise: require the .svg suffix, so the hardcoded type is
+                # provably correct rather than incidentally correct.
+                if (f.suffix != ".svg" or f.parent != (DIR / "pieces").resolve()
+                        or not f.exists()):
                     self.send_json({"error": "not found"}, 404)
                     return
                 body = f.read_bytes()
