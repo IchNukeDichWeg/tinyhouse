@@ -31,7 +31,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 
 | # | ID | Tier | Verdict | Metric | Commit |
 |---|---|---|---|---|---|
-| 1 | THB-01 | 0 | **CONFIRMED** | fix costs nothing on the bounds path: start-position negative hunt d16 White 9,913,857 -> 9,616,663 nodes (-3.0%), Black 1,824,606 -> 1,791,866 (-1.8%); repro position d13 8,279,609 -> 8,988,304 (+8.6%) | `TBD` |
+| 1 | THB-01 | 0 | **CONFIRMED** | fix costs nothing on the bounds path: start-position negative hunt d16 White 9,913,857 -> 9,616,663 nodes (-3.0%), Black 1,824,606 -> 1,791,866 (-1.8%); repro position d13 8,279,609 -> 8,988,304 (+8.6%) | `8b2e81c` |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
