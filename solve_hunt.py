@@ -139,13 +139,29 @@ name = "WHITE" if args.color == 0 else "BLACK"
 tty = sys.stdout.isatty()
 
 
+# The progress JSON is written FIRST and on purpose: a proven depth is the
+# expensive result and must survive even if the table dump cannot be written.
+# The dump only saves re-searching it.
+last_save_ok = True
+
+
 def save_state():
+    global last_save_ok
     state_path.write_text(json.dumps(state, indent=2))
-    E.lib.th_tt_save(str(tt_path).encode())
+    rc = E.lib.th_tt_save(str(tt_path).encode())
+    last_save_ok = rc == 0
+    if not last_save_ok:
+        print(f"  WARNING: could not write the table dump to {tt_path}. Every "
+              f"proven depth is still recorded in {state_path}, but resuming "
+              f"will re-search the current depth from an empty table.", flush=True)
 
 
 def on_sigint(sig, frm):
-    print("\ninterrupted; checkpoint is current, re-run the same command to resume")
+    if last_save_ok:
+        print("\ninterrupted; checkpoint is current, re-run the same command to resume")
+    else:
+        print("\ninterrupted; the last table dump FAILED to write (see the warning "
+              "above), so resuming re-searches from the last depth that saved")
     sys.exit(130)
 
 
@@ -215,4 +231,5 @@ for d in range(start_depth, args.maxdepth + 1, 2):
         break
     state["proven_no_win_through"] = d
     save_state()
-    print(f"  => no forced {name} win within {d} plies (proven, checkpointed)", flush=True)
+    print(f"  => no forced {name} win within {d} plies (proven, "
+          + ("checkpointed)" if last_save_ok else "progress recorded, no table dump)"), flush=True)

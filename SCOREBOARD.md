@@ -39,6 +39,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 6 | THB-06 | 1 | **CONFIRMED** | parse-time rejection; perft(7) 1,355,253 unchanged | see below |
 | 7 | TH-21 | 3 | **CONFIRMED** | coverage; suite 59 -> 61 tests, +0.0s | see below |
 | 8 | THB-07 | 1 | **CONFIRMED** | foreign-rule dump: rc 0 -> -3; header 24 -> 32 bytes, so pre-existing dumps are invalidated by design | see below |
+| 9 | THB-08 | 1 | **CONFIRMED** | failed save: silent exit-0 -> WARNING + intact previous dump; perft(7) 1,355,253 unchanged | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -218,3 +219,30 @@ with the recorded build edited it prints `differs in build; starting fresh`.
 **Cost, stated plainly**: every existing `.tt` dump is now unreadable (the
 header grew from 3 words to 4). That is correct rather than unfortunate -- the
 build changed, so the entries are from a different engine either way.
+
+### THB-08 · a failed save destroyed the previous checkpoint
+
+Both arms reproduced on the shipped build.
+
+**Silent failure.** With a directory at the `.tt` path, `solve_hunt.py` printed
+`=> no forced WHITE win within 6 plies (proven, checkpointed)` and exited 0
+with nothing written. The docstring promises "an interrupted run costs at most
+the depth it died in" and the SIGINT handler prints "checkpoint is current";
+neither consulted the return value.
+
+**Destroy-on-open.** `fopen(fname, "wb")` truncated the live dump before a byte
+was written: saving a 2^12 table over a 2^18 dump took it from 4,194,336 bytes
+to 65,568, and reloading at 2^18 returned -2. The good dump was unrecoverable
+from the moment the new save started, not from the moment it failed.
+
+Now `<name>.tmp` + `fsync` + `rename`, which is atomic within a filesystem, so
+the old dump stands until the new one is complete on disk. `solve_hunt` reports
+the failure, says what survived it (every proven depth is in the JSON, which is
+written first on purpose), and the "checkpointed" wording and the SIGINT
+message both follow the actual result now.
+
+perft(7) unchanged at 1,355,253.
+
+**Incidental**: two `solve_hunt` runs of the same depth reported 820 and 807
+nodes. That is not drift, it is `--workers 2` -- lazy SMP is nondeterministic
+by construction. Every campaign measurement uses one worker.

@@ -183,3 +183,27 @@ def test_tt_dump_carries_the_build_that_wrote_it(tt, tmp_path):
     struct.pack_into("<Q", raw, 24, 0xDEADBEEF)
     (tmp_path / "foreign.tt").write_bytes(raw)
     assert tt.lib.th_tt_load(str(tmp_path / "foreign.tt").encode()) == -3
+
+
+def test_a_failed_tt_save_leaves_the_previous_dump_intact(tt, tmp_path):
+    """THB-08: th_tt_save opened the live checkpoint with fopen(.., "wb"),
+    truncating it before a byte was written, and nothing restored it on
+    failure. A 268 MB dump overwritten by a smaller table became 4 MB and would
+    not reload -- the previous good dump was unrecoverable from the moment the
+    new save started. It now writes to <name>.tmp and renames.
+    """
+    f = tmp_path / "live.tt"
+    assert tt.lib.th_tt_save(str(f).encode()) == 0
+    good = f.read_bytes()
+
+    # a path that cannot be written: the .tmp sibling is created and removed
+    assert tt.lib.th_tt_save(str(tmp_path / "no" / "such" / "dir.tt").encode()) == -1
+    assert not (tmp_path / "no").exists()
+
+    # ...and a save onto a directory must not leave a stray .tmp behind either
+    (tmp_path / "adir.tt").mkdir()
+    assert tt.lib.th_tt_save(str(tmp_path / "adir.tt").encode()) == -1
+    assert not (tmp_path / "adir.tt.tmp").exists()
+
+    assert f.read_bytes() == good
+    assert tt.lib.th_tt_load(str(f).encode()) == 0

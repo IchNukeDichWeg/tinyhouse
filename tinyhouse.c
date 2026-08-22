@@ -274,6 +274,7 @@ uint64_t th_perft(THPos *p, int depth) {
 #include <stdio.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <unistd.h>
 
 #define MATE 30000
 #define MATE_BOUND 29000
@@ -403,16 +404,30 @@ uint64_t th_build_id(void) { return (uint64_t)TH_BUILD_ID; }
 
 static uint64_t tt_seed_used = 0;
 
+/* THB-08: write to <fname>.tmp and rename. fopen(fname, "wb") truncated the
+ * LIVE checkpoint before a byte was written and nothing restored it, so a save
+ * that failed or was interrupted destroyed the previous good dump: a 268 MB
+ * dump overwritten by a 2^18 table became 4 MB and would not reload. rename()
+ * is atomic within a filesystem, so the old dump stands until the new one is
+ * complete on disk - hence the fsync before it, since a crash right after a
+ * "checkpointed" line would otherwise still lose the dump. */
 int th_tt_save(const char *fname) {
     if (!tt) return -1;
-    FILE *f = fopen(fname, "wb");
+    char tmp[4096];
+    size_t n = strlen(fname);
+    if (n + 5 > sizeof tmp) return -1;
+    memcpy(tmp, fname, n);
+    memcpy(tmp + n, ".tmp", 5);
+    FILE *f = fopen(tmp, "wb");
     if (!f) return -1;
     uint64_t hdr[4] = {0x54494E59484F5553ULL, tt_mask + 1, tt_seed_used,
                        (uint64_t)TH_BUILD_ID};
     int ok = fwrite(hdr, sizeof hdr, 1, f) == 1 &&
-             fwrite(tt, sizeof(TTEntry), tt_mask + 1, f) == tt_mask + 1;
+             fwrite(tt, sizeof(TTEntry), tt_mask + 1, f) == tt_mask + 1 &&
+             fflush(f) == 0 && fsync(fileno(f)) == 0;
     fclose(f);
-    return ok ? 0 : -1;
+    if (!ok || rename(tmp, fname) != 0) { remove(tmp); return -1; }
+    return 0;
 }
 
 /* returns 0 on success, -1 on missing/unreadable, -2 on size/seed mismatch,
