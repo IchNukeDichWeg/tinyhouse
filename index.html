@@ -395,7 +395,10 @@ $("btnload").onclick = async () => {
   state.hist = [t]; state.hist.moves = []; state.histAt = 0;
   load(t);
 };
-$("depth").innerHTML = [8,10,12,14,16,18,20,22].map(d => `<option ${d===14?"selected":""}>${d}</option>`).join("");
+// Capped at server.py's MAX_GUI_DEPTH. Measured cold on an M2 Pro, one
+// analyze call from the start position: d14 1.1s, d16 10.3s, d18 98.8s. 18 is
+// not an interactive depth; solve_hunt.py is the tool for deeper.
+$("depth").innerHTML = [8,10,12,14,16].map(d => `<option ${d===14?"selected":""}>${d}</option>`).join("");
 $("depth").onchange = analyze;
 
 $("promo").addEventListener("click", ev => {

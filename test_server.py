@@ -229,3 +229,44 @@ def test_value_and_snd_are_in_the_same_frame(srv):
     swap = ((b["snd"] & 1) << 1) | ((b["snd"] & 2) >> 1)
     assert a["snd"] == swap, (a["snd"], b["snd"])
     assert a["snd"] != b["snd"], "the flags did not move with the value"
+
+
+def test_a_busy_engine_returns_503_instead_of_queueing(srv):
+    """THB-11: an abandoned request pinned ENGINE_LOCK for its whole search.
+
+    The handler runs to completion and only then dies on BrokenPipeError, so a
+    trivial depth-2 request measured 11.36s behind one abandoned depth-14
+    search, and 87.72s on an independent run. Only /api/analyze cache misses
+    are affected; /api/position never touches the lock, which this also pins.
+    """
+    server = srv.module
+    server.ENGINE_LOCK_TIMEOUT = 0.2
+    try:
+        assert server.ENGINE_LOCK.acquire()
+        try:
+            code, err = srv("/api/analyze", tfen=START, depth=8)
+            assert code == 503 and "another analysis" in err["error"]
+            code, info = srv("/api/position", tfen=START)      # never blocks
+            assert code == 200
+        finally:
+            server.ENGINE_LOCK.release()
+    finally:
+        server.ENGINE_LOCK_TIMEOUT = 20.0
+
+    code, a = srv("/api/analyze", tfen=START, depth=8)
+    assert code == 200                                          # and recovers
+
+
+def test_the_gui_cannot_ask_for_a_non_interactive_depth(srv):
+    """The clamp is exercised at a cheap depth on purpose: running the real
+    MAX_GUI_DEPTH here would put a 10s search in every suite run."""
+    server = srv.module
+    assert server.MAX_GUI_DEPTH == 16
+    server.MAX_GUI_DEPTH = 4
+    try:
+        code, a = srv("/api/analyze", tfen=START, depth=22)
+        assert code == 200 and a["depth"] == 4
+    finally:
+        server.MAX_GUI_DEPTH = 16
+    page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
+    assert "[8,10,12,14,16]" in page

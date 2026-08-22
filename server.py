@@ -45,6 +45,26 @@ CACHE_ONLY_PROVEN = True
 # ponytail: one global engine lock -- the C search uses global TT/path state;
 # per-request engines if this ever serves more than one user
 ENGINE_LOCK = threading.Lock()
+
+# THB-11: an abandoned request used to hold the lock for as long as its search
+# ran, because the handler runs to completion and only then dies on
+# BrokenPipeError. Measured: a trivial depth-2 request went from a 0.13s idle
+# baseline to 11.36s behind one abandoned depth-14 search, and 87.72s on an
+# independent run. Only /api/analyze cache misses are affected -- /api/position,
+# /api/status, / and /pieces/ never touch the lock, and cache hits return
+# before it.
+ENGINE_LOCK_TIMEOUT = 20.0
+
+# ...and cap what the GUI can ask for at all. Measured cold on an M2 Pro, one
+# /api/analyze call each (th_solve plus th_root_moves) from the start position:
+# d14 1.10s / 3.7M nodes, d16 10.25s / 36.4M nodes, d18 98.77s / 397M nodes.
+# 18 is not an interactive depth and 20/22 are the multi-hour bound runs;
+# solve_hunt.py is the tool for those.
+MAX_GUI_DEPTH = 16
+
+
+class EngineBusy(Exception):
+    """Another analysis holds the engine and did not finish in time."""
 DB_LOCK = threading.Lock()
 db = None
 
@@ -106,7 +126,9 @@ def analyze(tfen: str, depth: int) -> dict:
         out["cached"] = True
         return out
     pos = T.Position.from_tfen(tfen)
-    with ENGINE_LOCK:
+    if not ENGINE_LOCK.acquire(timeout=ENGINE_LOCK_TIMEOUT):
+        raise EngineBusy("another analysis is still running; try again in a moment")
+    try:
         c = E.to_c(pos)
         bm = E.ffi.new("uint16_t *")
         snd = E.ffi.new("int *")
@@ -118,6 +140,8 @@ def analyze(tfen: str, depth: int) -> dict:
         n = E.lib.th_root_moves(c, depth, mvs, vals)
         dt = time.perf_counter() - t0
         nodes = E.lib.th_nodes() - n0
+    finally:
+        ENGINE_LOCK.release()
     moves = sorted(
         ({"move": T.move_str(mvs[i]), "value": white_view(vals[i], pos.stm)} for i in range(n)),
         key=lambda x: -x["value"] if pos.stm == T.WHITE else x["value"])
@@ -191,12 +215,14 @@ class Handler(BaseHTTPRequestHandler):
                 # stayed 0 while the per-move array came straight out of the
                 # table, producing a payload that contradicted itself and a
                 # cache row under a key no honest search can ever reproduce.
-                self.send_json(analyze(q["tfen"], max(1, min(int(q.get("depth", 12)), 22))))
+                self.send_json(analyze(q["tfen"], max(1, min(int(q.get("depth", 12)), MAX_GUI_DEPTH))))
             elif url.path == "/api/status":
                 status = json.loads(STATUS.read_text()) if STATUS.exists() else {}
                 self.send_json(status)
             else:
                 self.send_json({"error": "not found"}, 404)
+        except EngineBusy as e:
+            self.send_json({"error": str(e)}, 503)
         except Exception as e:  # surface engine/parse errors to the UI
             self.send_json({"error": str(e)}, 400)
 

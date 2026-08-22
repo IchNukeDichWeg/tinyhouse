@@ -54,7 +54,7 @@ line per item.
 | THB-08 | `save_state()` discards `th_tt_save`'s return; save truncates on open | **CONFIRMED** |
 | THB-09 | sqlite cache row is a function of live TT state, not of its key | **CONFIRMED** |
 | THB-10 | `/api/analyze` clamps depth above but not below | **CONFIRMED** |
-| THB-11 | one abandoned `/api/analyze` pins `ENGINE_LOCK` | PENDING |
+| THB-11 | one abandoned `/api/analyze` pins `ENGINE_LOCK` | **CONFIRMED** |
 | THB-15 | `DOUBLE_STEP` has no C counterpart | PENDING |
 | THB-14 | dylib rebuild trigger ignores the compile flags | PENDING |
 | THB-13 | setup mode silently strips the promoted flag | PENDING |

@@ -45,6 +45,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 12 | TH-41 | 1 | **CONFIRMED** | labelling only; no engine or node-count effect | see below |
 | 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | see below |
 | 14 | TH-40 | 1 | **CONFIRMED** | mirrored pair now reports snd 2 vs 1 (was 1 vs 1); cache namespace moves automatically via TH-42 | see below |
+| 15 | THB-11 | 1 | **CONFIRMED** | contended trivial request: unbounded wait -> 503 after 20s; GUI depth cap 22 -> 16 on measured cost (d16 10.25s, d18 98.77s cold) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -361,3 +362,34 @@ the mirrored pair instead, and asserts the two differ.
 
 **Cache namespace**: the item requires a bump in the same commit. TH-42 landed
 first, so it happens by construction -- `ENGINE_VERSION` hashes `server.py`.
+
+### THB-11 · one abandoned `/api/analyze` pinned `ENGINE_LOCK`
+
+The handler runs to completion and only then dies on `BrokenPipeError`, so the
+work outlives the client. The backlog's correction stands and is now pinned by
+a test: only `/api/analyze` **cache misses** block. `/api/position` returns 200
+while the lock is held.
+
+Two changes, and the second is the one that came out of measurement here.
+`ENGINE_LOCK.acquire(timeout=20)` turns an unbounded wait into a 503. And the
+depth dropdown offered 18, 20 and 22, which are not interactive depths at all.
+Measured cold on an M2 Pro, one `/api/analyze` (th_solve plus th_root_moves)
+from the start position:
+
+| depth | wall | nodes |
+|---|---|---|
+| 10 | 0.04s | 88,443 |
+| 12 | 0.13s | 478,989 |
+| 14 (GUI default) | **1.10s** | 3,735,810 |
+| 16 (new cap) | **10.25s** | 36,446,568 |
+| 18 | **98.77s** | 396,652,273 |
+
+Depth 18 is a 99-second hold of a global lock, and 20/22 are the multi-hour
+bound runs. `MAX_GUI_DEPTH = 16`, and the dropdown stops there; `solve_hunt.py`
+is the tool for deeper. The 20s timeout sits comfortably above the 10.25s
+worst case, so a legitimately queued request still succeeds rather than 503ing.
+
+**Deliberately not fixed**: `index.html` still wires `depth.onchange = analyze`.
+It is a `<select>`, so a mouse selection fires once; keyboard arrow navigation
+can fire per option in some browsers, and with the cap at 16 the worst that
+queues is a 10s search that now times out instead of hanging.
