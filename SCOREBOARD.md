@@ -52,6 +52,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 19 | THB-14 | 1 | **CONFIRMED** | flags-only edit: dylib unchanged (sha1 4a7c8c7f) -> rebuilt (afeba22c -> 9d16118d) | `125e934` |
 | 20 | THB-12 | 1 | **CONFIRMED** | browser-verified: two unawaited clicks record 1 move, not 2 (guard removed: 2 moves, wrong position) | `72f1344` |
 | 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | `72f1344` |
+| 22 | TH-01 | 2 | **CONFIRMED** | docs only; the claim is true after THB-01 but its stated reason never was | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -543,3 +544,14 @@ none of the nineteen correctness fixes moved a single node:
 That matters for the tiers that follow: this is the baseline tiers 4 and 5 will
 be measured against, and it is unchanged from the one taken at the top of the
 campaign.
+
+### TH-01 · "there are no search extensions, so the ply budget is exact"
+
+Re-read after THB-01 landed, and the item needs restating rather than applying
+as filed. The **claim** is now true: form M guarantees a reported mate distance
+never exceeds the depth. The **reasoning** was never right -- extensions were
+not what broke it, a TT cutoff at a node with no budget left was, and removing
+extensions would not have helped. So the correction is not the backlog's
+"a reported mate distance may exceed d" (which describes the pre-fix engine and
+would now be false); it is to name both of the things that make the budget
+exact, so that deleting either one is visibly a contract change.

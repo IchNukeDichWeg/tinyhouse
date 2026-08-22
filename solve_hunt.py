@@ -4,9 +4,12 @@ progress, resume, and multi-core lazy SMP.
   solve_hunt.py <color: 0=white 1=black> [--workers N] [--maxdepth D]
                 [--tt BITS] [--tfen TFEN] [--seed S] [--state FILE] [--fresh]
 
-A value > 29000 at depth d proves a forced win for that color; anything else
-proves there is no forced win within d plies (total plies - there are no
-search extensions, so the ply budget is exact).
+A value > 29000 at depth d proves a forced win for that color, at exactly the
+distance it reports; anything else proves there is no forced win within d
+plies (total plies). Two things make the budget exact, not one: the search has
+no extensions, AND a TT cutoff carrying a mate deeper than the depth remaining
+at that node is refused (TT_BUDGET_GUARD in tinyhouse.c). Without that guard
+the claim was simply false - a cold depth-12 hunt reported "mate in 15".
 
 RESUME: progress is checkpointed to --state (default solve_state/<hash>.json)
 after every completed depth, and the transposition table is dumped alongside
