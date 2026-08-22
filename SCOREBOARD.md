@@ -84,6 +84,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | `290c749` |
 | 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | `2556151` |
 | 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | `b4526f3` |
+| 54 | TH-16 (class B) | 5 | **KEPT-ON-NULL** | nodes +3.04% on the frozen suite (rows -5.63% to +7.28%, tie-break noise); time +8.15/+22.85/+7.91% on three hunts, -3.09% on mao-check perft; 74,702 positions move-set-identical to the Python engine | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1429,3 +1430,51 @@ arm measured 0.03-0.52% in the same sessions, and five items in the same tier
 measured clean, repeatable wins. The estimates are the part that was off, in
 both directions -- TH-08 came in at a third of its claim and TH-10 above its
 claim, while TH-16's and TH-14's cheap forms are net losses.
+
+---
+
+## Tier 5 — efficiency (nodes-to-depth)
+
+**Measurement conditions changed part-way through this tier**: from TH-13 onward
+the machine is running other work the user started, so **wall-clock and CPU
+figures below the TH-16 row are not taken**. Nodes-to-depth is load-independent
+and is this tier's metric anyway; anything that needs clean timing is deferred
+and handed over rather than guessed at.
+
+### TH-16 (class B) · prune drops that cannot answer a check — KEPT-ON-NULL
+
+**Correctness first, because this removes moves from the list.** 74,702
+positions walked from five roots, **7,961 of them in check**, legal move sets
+compared against the *Python* engine: **0 mismatches**. All three published
+proofs at their exact distances, mate-in-9 still absent at depth 8, the
+depth-100 draw proof still `v=0 snd=3`, negative bounds 0 at d12/14/16 both
+colours.
+
+**Nodes-to-depth, this tier's metric: a regression.** The frozen 16-row suite
+goes **6,476,533 -> 6,673,711, +3.04%**. Individual rows swing from **-5.63%**
+to **+7.28%**, which is the shape of tie-break reordering rather than of an
+efficiency change: `order_score` produces ties and the selection sort takes the
+first index holding the maximum, so shortening the list changes which tied legal
+move goes first.
+
+**Time, which is what the change actually acts on:**
+
+| workload | nodes | control | time |
+|---|---|---|---|
+| hunt d16 White, start | -1.66% | +0.51% | **+8.15%** |
+| hunt d16 Black, start | -0.35% | +0.54% | **+22.85%** |
+| hunt d13, THB-01 repro | +10.64% | +0.18% | **+7.91%** |
+| solve d14, start | +11.60% | -4.67% | -4.46% (NULL) |
+| perft(7), start | 0 | +0.42% | +1.32% |
+| perft(6), mao check | 0 | -1.40% | **-3.09%** |
+
+**Kept, and the reasoning is the point.** On this tier's metric it is null to
+slightly negative, and on the tier-4 metric it is a large win that tier 4 could
+not judge because the change is not node-identical. The mechanism explains the
+split: a mate hunt is full of in-check nodes, where skipping the empty-square
+scan and the drop emission is most of the node's work; perft from the start has
+few, which is why perft(6) on a mao-check position measures **-3.09%** -- a real
+cost, recorded rather than buried.
+
+The regression baseline is updated in the same commit, deliberately: digest
+`651da0519b02a4b7` -> `811f304f1eef7998`.

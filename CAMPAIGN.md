@@ -116,7 +116,7 @@ line per item.
 
 | ID | Item | Status |
 |---|---|---|
-| TH-16 | prune drops that cannot resolve a check (**reclassified from tier 4**: node-changing) | **REJECTED** |
+| TH-16 | prune drops that cannot resolve a check (**reclassified from tier 4**: node-changing) | **REJECTED** (class A) / **KEPT-ON-NULL** (class B) |
 | TH-13 | credit the symmetric `SND_LB` in mate-distance pruning | PENDING |
 | TH-39 | the `--tt 26` default is unmeasured | PENDING |
 | TH-17 | enemy-king-proximity bonus for quiet drops | PENDING |

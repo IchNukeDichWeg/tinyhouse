@@ -208,7 +208,50 @@ static void unmake(THPos *p, const Undo *u) {
  * below, at the drop loop) */
 #define DROP_EMPTY_MASK 1
 
-static int pseudo_moves(const THPos *p, uint16_t *out) {
+/* TH-16: TH-11's trap A, used constructively. When the mover is in check a
+ * drop cannot capture, so it can only help by BLOCKING - and in this game only
+ * a mao check has anything to block, since every other attacker is adjacent to
+ * the king. So under check, either exactly one mao attacks and its leg square
+ * is the single droppable square, or no drop is legal at all and the whole
+ * drop section can be skipped. Perft is unchanged by construction: every
+ * pruned drop was illegal anyway, and the surviving moves keep their order.
+ *
+ * The caller has to say whether the mover is in check, because pseudo_moves
+ * does not know and computing it here would charge every node for a fact most
+ * of them already have. -1 means "unknown", which generates everything. */
+#define DROP_CHECK_PRUNE 1
+#define DROP_CHECK_PRUNE_IN_SEARCH 1
+
+/* 0, or 1 with *sq set to the only square a drop may answer the check on */
+static int check_block_square(const THPos *p, int ks, int *sq) {
+    int them = 1 - p->stm, attackers = 0, leg = -1;
+    const uint8_t *n;
+    for (n = ORTH[ks]; *n != 0xff; n++) {
+        int pc = p->board[*n];
+        if (pc && COLOR(pc) == them && (TYPE(pc) == W || TYPE(pc) == K)) attackers++;
+    }
+    for (n = DIAG[ks]; *n != 0xff; n++) {
+        int pc = p->board[*n];
+        if (pc && COLOR(pc) == them && (TYPE(pc) == F || TYPE(pc) == K)) attackers++;
+    }
+    for (n = PCAPS[1 - them][ks]; *n != 0xff; n++) {
+        int pc = p->board[*n];
+        if (pc && COLOR(pc) == them && TYPE(pc) == P) attackers++;
+    }
+    if (attackers) return 0;              /* adjacent attacker: nothing to block */
+    for (int i = 0; MAO_ATT[ks][i][0] != 0xff; i++) {
+        int pc = p->board[MAO_ATT[ks][i][0]];
+        if (pc && COLOR(pc) == them && TYPE(pc) == U && !p->board[MAO_ATT[ks][i][1]]) {
+            if (++attackers > 1) return 0;    /* double mao check: nothing blocks both */
+            leg = MAO_ATT[ks][i][1];
+        }
+    }
+    if (attackers != 1) return 0;
+    *sq = leg;
+    return 1;
+}
+
+static int pseudo_moves(const THPos *p, uint16_t *out, int in_check) {
     int us = p->stm, n = 0;
     const int8_t *b = p->board;
     for (int s = 0; s < 16; s++) {
@@ -260,6 +303,22 @@ static int pseudo_moves(const THPos *p, uint16_t *out) {
      * The mask is built in its OWN gated loop and NOT accumulated inside the
      * piece loop above, which already walks all 16 squares and looks like the
      * better place for it. That version measured 6.5% SLOWER. */
+#if DROP_CHECK_PRUNE
+    if (in_check == 1) {
+        int blk, ks = king_sq(p, us);
+        if (!check_block_square(p, ks, &blk)) return n;
+        if (!p->board[blk]) {
+            for (int t = 0; t < 4; t++) {
+                if (!p->hands[us][t]) continue;
+                if (t == P && ((blk >> 2) == 0 || (blk >> 2) == 3)) continue;
+                out[n++] = MV_DROP(t, blk);
+            }
+        }
+        return n;
+    }
+#else
+    (void)in_check;
+#endif
 #if DROP_EMPTY_MASK
     if (p->hands[us][0] | p->hands[us][1] | p->hands[us][2] | p->hands[us][3]) {
         uint8_t empt[16];
@@ -290,14 +349,10 @@ static int pseudo_moves(const THPos *p, uint16_t *out) {
 /* legal moves; returns count. out may be NULL to just count. */
 int th_moves(THPos *p, uint16_t *out) {
     uint16_t buf[128];
-    int n = pseudo_moves(p, buf), nl = 0;
     Undo u;
-#if KING_SQ_HOIST
     int ks = king_sq(p, p->stm);
-#endif
-#if FAST_LEGALITY
     int in_chk = attacked(p, ks, 1 - p->stm);
-#endif
+    int n = pseudo_moves(p, buf, in_chk), nl = 0;
     for (int i = 0; i < n; i++) {
 #if FAST_LEGALITY
         if (!in_chk && cannot_expose_king(p, buf[i], ks)) {
@@ -334,14 +389,10 @@ uint64_t th_perft(THPos *p, int depth) {
     uint16_t buf[128];
     Undo u;
     if (depth == 0) return 1;
-    int n = pseudo_moves(p, buf);
-    uint64_t total = 0;
-#if KING_SQ_HOIST
     int ks = king_sq(p, p->stm);
-#endif
-#if FAST_LEGALITY
     int in_chk = attacked(p, ks, 1 - p->stm);
-#endif
+    int n = pseudo_moves(p, buf, in_chk);
+    uint64_t total = 0;
     for (int i = 0; i < n; i++) {
 #if FAST_LEGALITY
         if (!in_chk && cannot_expose_king(p, buf[i], ks)) {
@@ -712,7 +763,7 @@ static int horizon_has_move(THPos *p, int in_check) {
     (void)in_check;
 #endif
     uint16_t buf[128];
-    int n = pseudo_moves(p, buf);
+    int n = pseudo_moves(p, buf, in_check);
     Undo u;
 #if KING_SQ_HOIST
     int ks = king_sq(p, p->stm);
@@ -785,7 +836,16 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
     }
 
     uint16_t buf[128];
-    int n = pseudo_moves(p, buf);
+#if DROP_CHECK_PRUNE_IN_SEARCH
+    /* TH-16, class B. Pruning drops that cannot answer a check removes only
+     * ILLEGAL moves, but it is NOT node-identical: order_score produces ties
+     * (equal history, usually 0) and the selection sort takes the first index
+     * holding the maximum, so shortening the list changes which tied legal move
+     * is searched first. Nodes-to-depth is the metric here, not time. */
+    int n = pseudo_moves(p, buf, attacked(p, king_sq(p, p->stm), 1 - p->stm));
+#else
+    int n = pseudo_moves(p, buf, -1);
+#endif
     int scores[128];
     int enemy_ks = king_sq(p, 1 - p->stm);
 #if KING_SQ_HOIST
