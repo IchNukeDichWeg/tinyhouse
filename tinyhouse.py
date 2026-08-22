@@ -130,6 +130,16 @@ class Position:
                     promoted = j + 1 < len(rank) and rank[j + 1] == "~"
                     if promoted:
                         j += 1
+                    # Promotion is forced and PromoteTo=FUW, so a promoted
+                    # piece is always F/U/W. A promoted KING would slip past
+                    # both count guards below - the king count looks for the
+                    # unpromoted value and the unit-count loop skips K - which
+                    # is enough to smuggle a second king onto the board and get
+                    # a soundness-flagged "proof" out of the solver.
+                    if promoted and t not in (F, U, W):
+                        raise ValueError(
+                            f"TFEN marks a {TYPE_CHARS[t]} as promoted; only F, U and W "
+                            f"can be: {tfen!r}")
                     pos.board[_sq(f, r)] = piece(color, t, promoted)
                     f += 1
                 else:

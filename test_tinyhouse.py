@@ -143,6 +143,8 @@ def test_drop_always_legal_when_not_in_check():
     "fuwk/3p/P3/KWUF[FF] w",         # 3 ferzes in the game
     "3k/4/4/4[-] w",                 # no white king
     "k3/K3/4/4[-] w",                # side not to move is in check
+    "KK~2/4/4/3k[-] w",              # promoted king: invisible to both count guards
+    "3k/2P~1/4/K3[-] b",             # promoted pawn: promotion is to F/U/W only
 ])
 def test_from_tfen_rejects_malformed(bad):
     with pytest.raises(ValueError):

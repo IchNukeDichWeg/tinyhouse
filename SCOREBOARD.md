@@ -32,6 +32,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | # | ID | Tier | Verdict | Metric | Commit |
 |---|---|---|---|---|---|
 | 1 | THB-01 | 0 | **CONFIRMED** | fix costs nothing on the bounds path: start-position negative hunt d16 White 9,913,857 -> 9,616,663 nodes (-3.0%), Black 1,824,606 -> 1,791,866 (-1.8%); repro position d13 8,279,609 -> 8,988,304 (+8.6%) | `8b2e81c` |
+| 2 | THB-02 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -73,3 +74,19 @@ depths 6/8/10 x both colours, fresh table each) found **0** violations on the
 fixed build proves nothing. The warm-table experiment above is the sensitive
 one.
 
+
+### THB-02 · `from_tfen` accepted a promoted king
+
+Reproduced red: `KK~2/4/4/3k[-] w` parsed to a board carrying **two** white
+kings (values 5 and 13) and round-tripped unchanged, because the king count
+looks for the unpromoted value and the unit-count loop skips `ptype == K`.
+
+Root cause is one line wider than the item: `~` was applied to *any* type. The
+guard is therefore "only F, U and W can be promoted", which closes the promoted
+**pawn** in the same stroke (`3k/2P~1/4/K3[-] b`, also accepted before). The
+backlog had the promoted-pawn half filed under THB-03 and marked the
+count-invisibility claim REFUTED; both are true at once -- `P~` counts
+correctly, and it is still not a legal piece.
+
+perft(7) unchanged at 1,355,253; the five `PERFT_ORACLE` round-trips are green,
+so no legal TFEN in the repo used `~` on a P or K.
