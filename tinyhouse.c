@@ -121,6 +121,45 @@ int th_in_check(const THPos *p, int color) {
 #define KING_SQ_HOIST 1
 #define KS_AFTER(m, ks) ((!M_IS_DROP(m) && M_FROM(m) == (ks)) ? M_TO(m) : (ks))
 
+/* TH-11: this game has NO SLIDERS, so nothing can be pinned in the classical
+ * sense and most moves cannot expose the mover's own king at all. The only
+ * ways one can are: the king itself moving; the mover already being in check;
+ * or a piece vacating the LEG square of an enemy mao whose destination is the
+ * king. A capture cannot open a line, because the captured square stays
+ * occupied by the capturer. A drop only ever fills a square.
+ *
+ * Trap A, and it is not a nicety: "a drop can never expose the own king" is
+ * true but insufficient, because a mover who IS in check must BLOCK. Gating
+ * drops as unconditionally legal before the in-check test gives
+ * perft(6) = 3,226,861 against the true 139,141, so the whole shortcut is
+ * gated on not being in check.
+ *
+ * Trap B: the mao-origin test is TYPE(pc) == U, NOT
+ * board[origin] == PIECE(them, U, 0). attacked() ignores the promoted bit and
+ * a pawn can promote to U; the buggy form gives perft(7) = 892,492,429 against
+ * 196,868,543 on a promoted-mao position.
+ *
+ * Split into two toggles because the backlog measures this as a large win for
+ * perft and neutral-to-negative inside search(), and those are separate claims
+ * that deserve separate measurements. */
+#define FAST_LEGALITY 1
+#define FAST_LEGALITY_IN_SEARCH 0
+
+static int attacked(const THPos *p, int sq, int by);
+
+static int cannot_expose_king(const THPos *p, uint16_t m, int ks) {
+    if (M_IS_DROP(m)) return 1;
+    int frm = M_FROM(m);
+    if (frm == ks) return 0;
+    int them = 1 - p->stm;
+    for (int i = 0; MAO_ATT[ks][i][0] != 0xff; i++) {
+        if (MAO_ATT[ks][i][1] != frm) continue;
+        int pc = p->board[MAO_ATT[ks][i][0]];
+        if (pc && COLOR(pc) == them && TYPE(pc) == U) return 0;
+    }
+    return 1;
+}
+
 typedef struct { uint16_t m; int8_t captured; } Undo;
 
 static void make(THPos *p, uint16_t m, Undo *u) {
@@ -256,7 +295,17 @@ int th_moves(THPos *p, uint16_t *out) {
 #if KING_SQ_HOIST
     int ks = king_sq(p, p->stm);
 #endif
+#if FAST_LEGALITY
+    int in_chk = attacked(p, ks, 1 - p->stm);
+#endif
     for (int i = 0; i < n; i++) {
+#if FAST_LEGALITY
+        if (!in_chk && cannot_expose_king(p, buf[i], ks)) {
+            if (out) out[nl] = buf[i];
+            nl++;
+            continue;
+        }
+#endif
 #if KING_SQ_HOIST
         int myks = KS_AFTER(buf[i], ks);
         make(p, buf[i], &u);
@@ -290,7 +339,19 @@ uint64_t th_perft(THPos *p, int depth) {
 #if KING_SQ_HOIST
     int ks = king_sq(p, p->stm);
 #endif
+#if FAST_LEGALITY
+    int in_chk = attacked(p, ks, 1 - p->stm);
+#endif
     for (int i = 0; i < n; i++) {
+#if FAST_LEGALITY
+        if (!in_chk && cannot_expose_king(p, buf[i], ks)) {
+            if (depth == 1) { total += 1; continue; }
+            make(p, buf[i], &u);
+            total += th_perft(p, depth - 1);
+            unmake(p, &u);
+            continue;
+        }
+#endif
 #if KING_SQ_HOIST
         int myks = KS_AFTER(buf[i], ks);
         make(p, buf[i], &u);
@@ -730,6 +791,9 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 #if KING_SQ_HOIST
     int my_ks = king_sq(p, p->stm);
 #endif
+#if FAST_LEGALITY_IN_SEARCH
+    int in_chk_root = attacked(p, my_ks, 1 - p->stm);
+#endif
     for (int i = 0; i < n; i++) scores[i] = order_score(p, buf[i], ttm, ply, enemy_ks);
 
     int best = -MATE, alpha0 = alpha;
@@ -741,6 +805,12 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
         for (int j = i + 1; j < n; j++) if (scores[j] > scores[bi]) bi = j;
         uint16_t m = buf[bi]; buf[bi] = buf[i]; scores[bi] = scores[i]; buf[i] = m;
         uint64_t ckey = key_after(p, m, key);      /* before make: reads the pre-move board */
+#if FAST_LEGALITY_IN_SEARCH
+        if (!in_chk_root && cannot_expose_king(p, m, my_ks)) {
+            make(p, m, &u);
+            goto legal;
+        }
+#endif
 #if KING_SQ_HOIST
         int myks = KS_AFTER(m, my_ks);
         make(p, m, &u);
@@ -748,6 +818,9 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 #else
         make(p, m, &u);
         if (th_in_check(p, 1 - p->stm)) { unmake(p, &u); continue; }
+#endif
+#if FAST_LEGALITY_IN_SEARCH
+    legal:
 #endif
         any = 1;
         SInfo ci;

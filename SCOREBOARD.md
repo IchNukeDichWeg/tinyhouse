@@ -80,6 +80,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 47 | TH-09 | 4 | **CONFIRMED** | +5.24% solve d14, +5.56/+5.15% hunt d16, +6.06% drop-heavy vs 0.0-0.8% controls; perft +1.00% (reported 1.071x); node-identical | see below |
 | 48 | TH-10 | 4 | **CONFIRMED** | +7.92% solve d14, +7.44/+7.47% hunt d16, +3.78% drop-heavy, perft +0.34% (no regression); KEY_PARANOIA clean over 123M nodes incl. SMP | see below |
 | 49 | TH-12 | 4 | **CONFIRMED** | +10.16% perft(7), +39.56% drop-heavy perft, +2.53% solve d14, +2.95% hunt d16 vs controls under 0.4%; node-identical | see below |
+| 50 | TH-11 | 4 | **CONFIRMED** | perft +28.46% start, +110.83% drop-heavy; inside search -0.78%/-0.68% so shipped OFF there; perft equivalence checked on 8 positions incl. 3 promoted-mao | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1234,3 +1235,42 @@ once per move.
 first, because for a drop `M_FROM(m)` is the piece TYPE (0-3), which aliases
 square indices 0-3 -- a bare `M_FROM(m) == ks` would false-positive whenever the
 mover's own king stands on rank 1, which is where it starts.
+
+### TH-11 · fast legality — CONFIRMED for perft, REJECTED inside search
+
+Both halves built and measured separately, which is why the item ships with two
+toggles rather than one. Node-identical on every arm; digest unchanged.
+
+| workload | control | `FAST_LEGALITY` (shipped) | also in `search()` |
+|---|---|---|---|
+| perft(7), start | -0.56% | **+28.46%** | +29.00% |
+| perft(4), drop-heavy | +0.04% | **+110.83%** | +110.83% |
+| solve d14, start | +0.01% | +0.03% (NULL) | **-0.78%** |
+| hunt d16, start | +0.07% | +0.07% (NULL) | **-0.68%** |
+
+**The backlog's verdict is confirmed exactly**: a large win for perft, a small
+but real **loss** inside the search. Its own correction to the reported 3-6%
+search regression -- "overstated, measured 0.1% to 2.1%" -- also holds: I
+measure a 0.68-0.78% loss. `FAST_LEGALITY_IN_SEARCH` stays **0**, with the
+measurement in the file next to it.
+
+**The perft figures are lower than reported (1.391x / 2.193x against 1.285x /
+2.108x), and the reason is the campaign's own re-baselining rule.** TH-12
+landed first and made the legality test this skips cheaper, so there is less
+left to save. Measured against the original tree the merge's numbers would
+stand; measured against the tree as it now is, these are the numbers.
+
+**Both traps are in the code, and the equivalence is checked rather than
+argued.** Perft agrees with the toggle-off build on eight positions including
+three with a **promoted mao** (`3k/2U~1/4/K3[-] b` 8,112; `2k1/1U~2/4/1K2[-] b`
+10,097; `1k2/2U~1/1K2/4[f] b` 18,687), which is trap B's exact case -- the
+origin test is `TYPE(pc) == U`, since `attacked()` ignores the promoted bit and
+a pawn can promote to U. Trap A is the `!in_chk` gate: a mover in check must
+block, and without the gate perft(6) reads 3,226,861 against 139,141.
+
+The underlying theorem is worth stating plainly, because it is what makes this
+safe at all: **this game has no sliders**, so nothing can be pinned. A move can
+only expose the mover's own king by moving the king, by being made while
+already in check, or by vacating the leg square of an enemy mao aimed at the
+king. A capture cannot open a line, because the captured square stays occupied
+by the capturer.
