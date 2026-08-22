@@ -59,23 +59,23 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | `080916f` |
 | 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | `d298404` |
 | 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | `713e188` |
-| 29 | TH-19 | 3 | **CONFIRMED** | in-process repeats 757,431/839,298/845,107/1,345,672/795,066 -> 757,431 x5 with th_clear_history; bench_workers prints 757,431 not '1M' | see below |
-| 30 | TH-18 | 3 | **CONFIRMED** | 9 pinned cases green; sensitivity measured: values catch 0 of 5 planted mutations, node counts catch 4 of 5 | see below |
-| 31 | TH-20 | 3 | **CONFIRMED** | catches 5 of 5 planted mutations (vs 0 of 5 for TH-18's value pin); deterministic, digest 651da0519b02a4b7 / 6,476,533 nodes, ~2s | see below |
-| 32 | TH-22 | 3 | **CONFIRMED** | 20 of 20 cdef symbols now have a contract assertion (5 previously untouched); catches 4 of 4 planted cdef errors | see below |
-| 33 | TH-28 | 3 | **CONFIRMED** | both directions pinned; a build with a sound non-terminal horizon fails it | see below |
-| 34 | TH-30 | 3 | **CONFIRMED** | keys asserted to differ, not values; a no-op th_seed fails it | see below |
-| 35 | TH-27 | 3 | **CONFIRMED** | workers 1/2/4 all give 29991 + b4c2 at d9 and 0 at d8; helper-depth mutation passes (the budget guard absorbs it) | see below |
-| 36 | TH-32 | 3 | **CONFIRMED** | null-hypothesis calibration: identical builds measure +0.4% / -0.6% against 1.1-1.2% spread, both reported NULL; noise floor ~1% | see below |
-| 37 | TH-31 | 3 | **CONFIRMED** | contract pinned: counter unchanged across th_tt_init/th_seed and across perft(5)=16,021; no reset added | see below |
-| 38 | TH-34 | 3 | **CONFIRMED** | win branch snd=1 at d9/d11, negative branch snd=0 at d8/10/12/14 (assertion gated accordingly) | see below |
-| 39 | TH-35 | 3 | **CONFIRMED** | d1c2 now reports -29990 with snd 2 (SND_UB); all five quiet moves snd 0 | see below |
-| 40 | TH-24 | 3 | **CONFIRMED** | walk now starts from all 5 oracle roots (was 1); +0.2s | see below |
-| 41 | TH-23 | 3 | **CONFIRMED** | 94,624 comparisons, 0 mismatches; catches 3 of 3 planted geometry bugs | see below |
-| 42 | TH-26 | 3 | **CONFIRMED** | resume, --fresh and build-mismatch paths all pinned by subprocess | see below |
-| 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | see below |
-| 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | see below |
-| 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | see below |
+| 29 | TH-19 | 3 | **CONFIRMED** | in-process repeats 757,431/839,298/845,107/1,345,672/795,066 -> 757,431 x5 with th_clear_history; bench_workers prints 757,431 not '1M' | `5ab4df8` |
+| 30 | TH-18 | 3 | **CONFIRMED** | 9 pinned cases green; sensitivity measured: values catch 0 of 5 planted mutations, node counts catch 4 of 5 | `e2792a4` |
+| 31 | TH-20 | 3 | **CONFIRMED** | catches 5 of 5 planted mutations (vs 0 of 5 for TH-18's value pin); deterministic, digest 651da0519b02a4b7 / 6,476,533 nodes, ~2s | `0b26df1` |
+| 32 | TH-22 | 3 | **CONFIRMED** | 20 of 20 cdef symbols now have a contract assertion (5 previously untouched); catches 4 of 4 planted cdef errors | `ebf9491` |
+| 33 | TH-28 | 3 | **CONFIRMED** | both directions pinned; a build with a sound non-terminal horizon fails it | `7d410b4` |
+| 34 | TH-30 | 3 | **CONFIRMED** | keys asserted to differ, not values; a no-op th_seed fails it | `7d410b4` |
+| 35 | TH-27 | 3 | **CONFIRMED** | workers 1/2/4 all give 29991 + b4c2 at d9 and 0 at d8; helper-depth mutation passes (the budget guard absorbs it) | `7d410b4` |
+| 36 | TH-32 | 3 | **CONFIRMED** | null-hypothesis calibration: identical builds measure +0.4% / -0.6% against 1.1-1.2% spread, both reported NULL; noise floor ~1% | `dd9aa78` |
+| 37 | TH-31 | 3 | **CONFIRMED** | contract pinned: counter unchanged across th_tt_init/th_seed and across perft(5)=16,021; no reset added | `47cca17` |
+| 38 | TH-34 | 3 | **CONFIRMED** | win branch snd=1 at d9/d11, negative branch snd=0 at d8/10/12/14 (assertion gated accordingly) | `4b8c511` |
+| 39 | TH-35 | 3 | **CONFIRMED** | d1c2 now reports -29990 with snd 2 (SND_UB); all five quiet moves snd 0 | `4b8c511` |
+| 40 | TH-24 | 3 | **CONFIRMED** | walk now starts from all 5 oracle roots (was 1); +0.2s | `f6070ce` |
+| 41 | TH-23 | 3 | **CONFIRMED** | 94,624 comparisons, 0 mismatches; catches 3 of 3 planted geometry bugs | `f6070ce` |
+| 42 | TH-26 | 3 | **CONFIRMED** | resume, --fresh and build-mismatch paths all pinned by subprocess | `a064fd6` |
+| 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | `a064fd6` |
+| 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | `d0e1350` |
+| 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | `94ea4f2` |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
