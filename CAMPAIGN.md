@@ -88,7 +88,7 @@ line per item.
 | TH-21 | pin the TT save/load round trip and the seed/size refusals | **CONFIRMED** |
 | TH-32 | a paired NPS bench for the C search | **CONFIRMED** |
 | TH-20 | paired nodes-to-depth + solver-digest regression harness | **CONFIRMED** |
-| TH-31 | `th_nodes()` has no reset and does not count perft | PENDING |
+| TH-31 | `th_nodes()` has no reset and does not count perft | **CONFIRMED** |
 | TH-27 | assert the SMP hunt returns the same proof as single-threaded | **CONFIRMED** |
 | TH-34 | expose `snd` from `th_mate_hunt_mt` | PENDING |
 | TH-35 | expose `snd` from `th_root_moves` | PENDING |

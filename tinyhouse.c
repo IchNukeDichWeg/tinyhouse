@@ -363,6 +363,14 @@ int th_tt_init(int log2_entries) {
 static void nodes_flush(void) {
     if (tl_pending) { atomic_fetch_add_explicit(&g_nodes, tl_pending, memory_order_relaxed); tl_pending = 0; }
 }
+/* TH-31: this counter is CUMULATIVE for the life of the process. Nothing
+ * resets it - not th_tt_init, not th_seed - so a caller wanting the cost of
+ * one search must difference it around the call, which all three shipped
+ * callers do. No reset entry point is provided on purpose: differencing is
+ * correct under concurrency and a reset is not.
+ * It also does NOT count perft. th_perft recurses without touching g_nodes, so
+ * differencing around a perft yields zero; th_perft's own return value is the
+ * leaf count and is what a perft benchmark should read. */
 uint64_t th_nodes(void) { nodes_flush(); return atomic_load_explicit(&g_nodes, memory_order_relaxed); }
 
 typedef struct { int16_t value; uint16_t move; uint8_t depth, flag, sound; } TTView;

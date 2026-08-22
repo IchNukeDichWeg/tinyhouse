@@ -67,6 +67,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 34 | TH-30 | 3 | **CONFIRMED** | keys asserted to differ, not values; a no-op th_seed fails it | see below |
 | 35 | TH-27 | 3 | **CONFIRMED** | workers 1/2/4 all give 29991 + b4c2 at d9 and 0 at d8; helper-depth mutation passes (the budget guard absorbs it) | see below |
 | 36 | TH-32 | 3 | **CONFIRMED** | null-hypothesis calibration: identical builds measure +0.4% / -0.6% against 1.1-1.2% spread, both reported NULL; noise floor ~1% | see below |
+| 37 | TH-31 | 3 | **CONFIRMED** | contract pinned: counter unchanged across th_tt_init/th_seed and across perft(5)=16,021; no reset added | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -892,3 +893,16 @@ to be treated as unproven rather than small.
 
 It also uses CPU time rather than wall clock, which is the one that does not
 move when something else on the machine wakes up.
+
+### TH-31 · `th_nodes()` has no reset, and does not count perft
+
+Both facts re-verified: neither `th_tt_init` nor `th_seed` resets the counter,
+and `th_perft` does not feed it at all -- `th_nodes()` is byte-identical across
+a `perft(5)` returning 16,021. All three shipped callers difference correctly,
+so nothing is broken; what was missing is that the contract was written down
+nowhere and nothing would catch it changing.
+
+**No reset entry point added, deliberately.** Differencing is correct under
+concurrency and a reset is not, and every caller already differences. The
+counter's contract is now in the code and pinned by a test, which is the
+smaller change and the one that keeps working when a second thread appears.

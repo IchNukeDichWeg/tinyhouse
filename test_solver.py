@@ -499,3 +499,29 @@ def test_the_smp_hunt_finds_the_same_proof_as_one_thread(tt):
         tt.lib.th_clear_history()
         assert tt.lib.th_mate_hunt_mt(tt.to_c(T.Position.from_tfen(mate9)), 8, T.BLACK,
                                       workers, bm) == 0
+
+
+def test_the_node_counter_is_cumulative_and_ignores_perft(tt):
+    """TH-31: two facts about th_nodes that nothing recorded.
+
+    It is cumulative for the life of the process -- neither th_tt_init nor
+    th_seed resets it -- so a caller must difference around a search. And
+    th_perft does not feed it at all, so differencing around a perft yields
+    zero, which would read as "perft is free" to anyone measuring that way.
+    th_perft's return value is the leaf count and is what to measure instead.
+    """
+    start = tt.to_c(T.Position.start())
+    bm, snd = tt.ffi.new("uint16_t *"), tt.ffi.new("int *")
+
+    n0 = tt.lib.th_nodes()
+    tt.lib.th_solve(start, 6, bm, snd)
+    n1 = tt.lib.th_nodes()
+    assert n1 > n0
+
+    tt.lib.th_tt_init(18)
+    tt.lib.th_seed(DEFAULT_SEED)
+    assert tt.lib.th_nodes() >= n1, "th_tt_init or th_seed reset the counter"
+
+    n2 = tt.lib.th_nodes()
+    assert tt.lib.th_perft(tt.to_c(T.Position.start()), 5) == 16021
+    assert tt.lib.th_nodes() == n2, "th_perft now feeds g_nodes; update the callers"
