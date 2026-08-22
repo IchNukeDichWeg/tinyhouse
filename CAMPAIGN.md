@@ -74,7 +74,7 @@ line per item.
 | TH-05 | `solve_status.json` says "single thread"; the tool defaults to 2 | **CONFIRMED** |
 | TH-03 | rep-safety "keeps the GHI problem out" overclaims | **CONFIRMED** |
 | TH-06 | the negative bounds need the second-seed re-verification too | **CONFIRMED** |
-| TH-04 | `PERFT_ORACLE` docstring overclaims its provenance | PENDING |
+| TH-04 | `PERFT_ORACLE` docstring overclaims its provenance | **CONFIRMED** |
 | TH-07 | "exists exactly twice" vs code rejecting only `> 2` | PENDING |
 
 ## Tier 3 — instruments

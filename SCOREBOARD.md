@@ -57,6 +57,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 24 | TH-05 | 2 | **CONFIRMED** | default workers 2 -> 1; node counts now reproducible run to run (467/3,420/23,635 three for three vs 786/807/792 at 2 workers) | see below |
 | 25 | TH-03 | 2 | **CONFIRMED** | PV replay: 9/9 plies legal, 0 repetitions, terminal result -1; perft(7) 1,355,253 unchanged | see below |
 | 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | see below |
+| 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -660,3 +661,23 @@ A run already under `--seed` says so instead of suggesting a third seed.
 nodes at depth 16, against 9,616,663 for the same depth run cold in its own
 process. Iterative deepening in one process carries `history` over. That is the
 instrument tier's problem and it is real.
+
+### TH-04 · the `PERFT_ORACLE` docstring overclaimed its provenance
+
+All three defects confirmed, and the merge's first-hand note is upheld: nothing
+in the repo enumerated the 33 depth-2 nodes, the "three independent
+implementations" were three models of one family working from one document and
+none of them is in the tree, and `perft(6)`/`perft(7)` had no stated provenance
+at all.
+
+**Rather than only weakening the claim, the missing artifact was produced.**
+Depth 2 is now decomposed per root move -- `a1b2` 5, `a2a3` 6, `b1b2` 6,
+`c1b3` 3, `c1d3` 6, `d1c2` 7, summing to 33 -- which is small enough to check
+against `RULES.md` by hand, and that is what "hand-verified" should have meant.
+Depth 1 was already pinned move by move.
+
+The rest is restated honestly: the from-spec cross-check was real but is a
+transcription check rather than independent derivation, since `tinyhouse.c`
+declares itself a mirror of `tinyhouse.py`; and `perft(6)`/`perft(7)` are
+config-drift signatures, pinning that the engine has not changed rather than
+that it was ever right. **Not wrong**: every oracle number itself.

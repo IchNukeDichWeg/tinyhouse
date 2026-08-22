@@ -1,6 +1,25 @@
-"""Tinyhouse engine tests. Perft oracle: values hand-verified at depth 1-2 from
-the start position (all 33 nodes enumerated manually) and cross-checked by three
-independent implementations written from RULES.md alone."""
+"""Tinyhouse engine tests.
+
+PERFT_ORACLE provenance, stated exactly (TH-04), because the previous wording
+claimed more than was done:
+
+- depth 1 from the start is pinned move by move in `test_start_moves`, and
+  depth 2 is decomposed per root move in `test_start_perft_divide` below, so
+  the 33 is auditable by hand rather than asserted. No such enumeration
+  artifact existed when the docstring first claimed one.
+- the deeper oracle values were cross-checked by three from-spec
+  implementations written from RULES.md alone. That check was real, but it was
+  three models of one family working from one document, and **none of the three
+  is in this repo**: what the tree holds is `tinyhouse.py` and `tinyhouse.c`,
+  and `tinyhouse.c` declares itself a mirror of `tinyhouse.py`. Treat their
+  agreement as a transcription check, not as independent derivation.
+- `perft(6)` and `perft(7)` in `test_engine_c.py` have no from-spec provenance
+  at all. They are config-drift signatures: they pin that the engine has not
+  changed, not that it was ever right.
+
+Every oracle number itself is believed correct; only the strength of the
+evidence behind it is restated here.
+"""
 import random
 
 import pytest
@@ -22,6 +41,22 @@ PERFT_ORACLE = [
 def test_perft(tfen, counts):
     pos = Position.from_tfen(tfen)
     assert [pos.perft(d) for d in range(1, len(counts) + 1)] == counts
+
+
+# Depth-2 perft decomposed per root move: 6 replies summing to 33. Small enough
+# to check against RULES.md by hand, which is what "hand-verified" should mean.
+START_DIVIDE = {"a1b2": 5, "a2a3": 6, "b1b2": 6, "c1b3": 3, "c1d3": 6, "d1c2": 7}
+
+
+def test_start_perft_divide():
+    pos = Position.start()
+    got = {}
+    for m in pos.legal_moves():
+        pos.make(m)
+        got[move_str(m)] = len(pos.legal_moves())
+        pos.unmake()
+    assert got == START_DIVIDE
+    assert sum(got.values()) == 33 == pos.perft(2)
 
 
 def test_start_moves():
