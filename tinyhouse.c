@@ -347,6 +347,33 @@ static void tt_store(uint64_t key, int16_t value, uint16_t move, uint8_t depth, 
     atomic_store_explicit(&e->xkey, key ^ d, memory_order_relaxed);
 }
 
+/* THB-01: a TT cutoff must never hand back a mate score whose distance
+ * exceeds the budget remaining at this node. The cutoffs below are gated on
+ * `tv.depth >= depth` and tv.depth is unsigned, so once depth has run out that
+ * test is unconditionally true: any stored mate was handed back at a node with
+ * no budget left and the ply re-basing dressed it up as a win found within the
+ * horizon. Cold depth 12 on `f1w1/2k1/K2p/W1UF[Up] b` returned 29985 - "Black
+ * wins in 15" - against a true distance of 13, so both the verdict and the
+ * distance were wrong. The defect was directional (a cutoff is only ever taken
+ * on a deeper or genuinely sound entry, so it can add wins and never conceal
+ * one), which is why no recorded negative bound was ever at risk.
+ *   0  pre-fix behaviour, kept as the node-identity pin for a toggle-off run
+ *   1  form H: refuse every cutoff at a horizon node
+ *   2  form M: refuse exactly the cutoffs that overrun the budget (shipped) */
+#define TT_BUDGET_GUARD 2
+
+static inline int tt_cut_ok(int v, int ply, int depth) {
+#if TT_BUDGET_GUARD == 0
+    (void)v; (void)ply; (void)depth; return 1;
+#elif TT_BUDGET_GUARD == 1
+    (void)v; (void)ply; return depth > 0;
+#else
+    int a = v < 0 ? -v : v;
+    if (a <= MATE_BOUND) return 1;      /* carries no distance claim to overrun */
+    return MATE - a - ply <= depth;     /* plies from HERE to the mate */
+#endif
+}
+
 /* TT persistence: a multi-hour depth is worth resuming. Entries are
  * self-validating (xkey ^ data == key) and keyed by the Zobrist tables, so a
  * dump is only meaningful under the same seed - the header stores it and the
@@ -435,7 +462,7 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) 
         int v = tv.value;
         if (v > MATE_BOUND) v -= ply;
         else if (v < -MATE_BOUND) v += ply;
-        if (ply > 0) {
+        if (ply > 0 && tt_cut_ok(v, ply, depth)) {
             if (tv.flag == TT_EXACT && (tv.depth >= depth || tv.sound == (SND_LB | SND_UB))) {
                 si->snd = tv.sound; return v;
             }

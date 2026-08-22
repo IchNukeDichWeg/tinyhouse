@@ -39,7 +39,7 @@ line per item.
 
 | ID | Item | Status |
 |---|---|---|
-| THB-01 | TT cutoff at a horizon node breaks the ply-budget contract | PENDING |
+| THB-01 | TT cutoff at a horizon node breaks the ply-budget contract | **CONFIRMED** |
 
 ## Tier 1 — correctness bugs
 
