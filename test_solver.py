@@ -312,3 +312,21 @@ def _root_values(E, depth):
     mvs, vals = E.ffi.new("uint16_t[128]"), E.ffi.new("int[128]")
     n = E.lib.th_root_moves(E.to_c(T.Position.start()), depth, mvs, vals)
     return {T.move_str(mvs[i]): vals[i] for i in range(n)}
+
+
+def test_regression_harness_matches_its_baseline():
+    """TH-20. The detector, as opposed to TH-18's record.
+
+    Calibrated against five mutations planted in search(): this catches all
+    five, the published-value pin catches none. Costs about 2s.
+    """
+    sys.path.insert(0, str(DIR / "scripts"))
+    import json
+
+    import engine_c as E
+    import regress
+
+    got = regress.measure(E)
+    want = json.loads(regress.BASELINE.read_text())
+    assert got["digest"] == want["digest"]
+    assert [r["nodes"] for r in got["rows"]] == [r["nodes"] for r in want["rows"]]

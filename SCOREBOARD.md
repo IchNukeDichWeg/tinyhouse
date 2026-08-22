@@ -61,6 +61,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | `713e188` |
 | 29 | TH-19 | 3 | **CONFIRMED** | in-process repeats 757,431/839,298/845,107/1,345,672/795,066 -> 757,431 x5 with th_clear_history; bench_workers prints 757,431 not '1M' | see below |
 | 30 | TH-18 | 3 | **CONFIRMED** | 9 pinned cases green; sensitivity measured: values catch 0 of 5 planted mutations, node counts catch 4 of 5 | see below |
+| 31 | TH-20 | 3 | **CONFIRMED** | catches 5 of 5 planted mutations (vs 0 of 5 for TH-18's value pin); deterministic, digest 651da0519b02a4b7 / 6,476,533 nodes, ~2s | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -767,3 +768,36 @@ high-value instrument, and this is the record-keeping one.
 (The killers mutation is invisible to both because `th_root_moves` calls
 `search()` directly and never goes through `root_search`, where the reset
 lives. A real coverage gap, recorded rather than papered over.)
+
+### TH-20 · paired nodes-to-depth + solver-digest harness
+
+`scripts/regress.py`, 8 frozen positions x depths 10 and 12, fresh table and
+cleared history per entry, ~2s. Deterministic: three consecutive runs give
+digest `651da0519b02a4b7` and 6,476,533 nodes exactly.
+
+**Calibrated, not assumed.** The same five mutations planted for TH-18, each
+built and run through this harness:
+
+| planted mutation | caught by | margin |
+|---|---|---|
+| TT mate-score ply re-basing removed | digest (values changed) | — |
+| root killers not reset | nodes | +3.53% |
+| mate-distance pruning clamp removed | nodes | +0.30% |
+| history update removed | nodes | **+22.97%** |
+| rep-safety store gate removed | nodes | **-0.02% (4 nodes)** |
+
+**Five of five, against zero of five for the published-value pin.** The killers
+mutation is the interesting one: TH-18 misses it because `th_root_moves` calls
+`search()` directly, while this goes through `root_search` where the reset
+lives. Coverage of the real entry point is what made the difference.
+
+The margins span three orders of magnitude, so the honest claim is bounded: a
+mutation quieter than four nodes is not ruled out, and neither field is a
+soundness proof. The docstring says so, and says a green run means "nothing
+detectably changed".
+
+The backlog's depth guidance is adopted -- 10/12, not 6/8, because at the
+shallow pair a path-dependent-store mutation is a one-node difference, which is
+luck rather than signal. Its cost estimate was also generous: the harness is
+about 110 lines including the comparison and `--lib` calibration path, not the
+~48 it projected for the measurement alone.

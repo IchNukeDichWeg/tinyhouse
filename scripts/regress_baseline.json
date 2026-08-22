@@ -1,0 +1,138 @@
+{
+ "digest": "651da0519b02a4b7",
+ "depths": [
+  10,
+  12
+ ],
+ "tt_bits": 22,
+ "rows": [
+  {
+   "tfen": "fuwk/3p/P3/KWUF[-] w",
+   "depth": 10,
+   "value": 0,
+   "snd": 0,
+   "best": "c1b3",
+   "nodes": 26060
+  },
+  {
+   "tfen": "fuwk/3p/P3/KWUF[-] w",
+   "depth": 12,
+   "value": 0,
+   "snd": 0,
+   "best": "c1b3",
+   "nodes": 212238
+  },
+  {
+   "tfen": "fuwk/3p/P1F1/KWU1[-] b",
+   "depth": 10,
+   "value": 29991,
+   "snd": 1,
+   "best": "b4c2",
+   "nodes": 36215
+  },
+  {
+   "tfen": "fuwk/3p/P1F1/KWU1[-] b",
+   "depth": 12,
+   "value": 29991,
+   "snd": 1,
+   "best": "b4c2",
+   "nodes": 133769
+  },
+  {
+   "tfen": "1uwk/1f1p/PW2/K1UF[-] w",
+   "depth": 10,
+   "value": 0,
+   "snd": 0,
+   "best": "c1b3",
+   "nodes": 84859
+  },
+  {
+   "tfen": "1uwk/1f1p/PW2/K1UF[-] w",
+   "depth": 12,
+   "value": 0,
+   "snd": 0,
+   "best": "c1b3",
+   "nodes": 666564
+  },
+  {
+   "tfen": "1uwk/Pf1p/4/KWUF[-] w",
+   "depth": 10,
+   "value": 0,
+   "snd": 0,
+   "best": "c1b3",
+   "nodes": 54439
+  },
+  {
+   "tfen": "1uwk/Pf1p/4/KWUF[-] w",
+   "depth": 12,
+   "value": 0,
+   "snd": 0,
+   "best": "c1b3",
+   "nodes": 589518
+  },
+  {
+   "tfen": "f1w1/2k1/K2p/W1UF[Up] b",
+   "depth": 10,
+   "value": 0,
+   "snd": 0,
+   "best": "d2c1=U",
+   "nodes": 276875
+  },
+  {
+   "tfen": "f1w1/2k1/K2p/W1UF[Up] b",
+   "depth": 12,
+   "value": 0,
+   "snd": 0,
+   "best": "d2c1=U",
+   "nodes": 2424248
+  },
+  {
+   "tfen": "1k2/4/2K1/4[PFUWpfuw] w",
+   "depth": 10,
+   "value": 29995,
+   "snd": 1,
+   "best": "P@c3",
+   "nodes": 27404
+  },
+  {
+   "tfen": "1k2/4/2K1/4[PFUWpfuw] w",
+   "depth": 12,
+   "value": 29995,
+   "snd": 1,
+   "best": "P@c3",
+   "nodes": 97099
+  },
+  {
+   "tfen": "1uwk/P3/3p/K2F[UWf] w",
+   "depth": 10,
+   "value": 0,
+   "snd": 0,
+   "best": "U@c2",
+   "nodes": 192486
+  },
+  {
+   "tfen": "1uwk/P3/3p/K2F[UWf] w",
+   "depth": 12,
+   "value": 0,
+   "snd": 0,
+   "best": "U@c2",
+   "nodes": 1503305
+  },
+  {
+   "tfen": "3k/1U2/4/K3[f] b",
+   "depth": 10,
+   "value": 0,
+   "snd": 0,
+   "best": "d4d3",
+   "nodes": 39787
+  },
+  {
+   "tfen": "3k/1U2/4/K3[f] b",
+   "depth": 12,
+   "value": 0,
+   "snd": 0,
+   "best": "d4d3",
+   "nodes": 111667
+  }
+ ]
+}

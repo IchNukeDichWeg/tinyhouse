@@ -87,7 +87,7 @@ line per item.
 | TH-28 | pin the horizon "non-terminal is UNSOUND" invariant | PENDING |
 | TH-21 | pin the TT save/load round trip and the seed/size refusals | **CONFIRMED** |
 | TH-32 | a paired NPS bench for the C search | PENDING |
-| TH-20 | paired nodes-to-depth + solver-digest regression harness | PENDING |
+| TH-20 | paired nodes-to-depth + solver-digest regression harness | **CONFIRMED** |
 | TH-31 | `th_nodes()` has no reset and does not count perft | PENDING |
 | TH-27 | assert the SMP hunt returns the same proof as single-threaded | PENDING |
 | TH-34 | expose `snd` from `th_mate_hunt_mt` | PENDING |
