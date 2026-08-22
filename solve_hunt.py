@@ -30,7 +30,9 @@ committing a long run.
 import argparse
 import hashlib
 import json
+import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -49,8 +51,52 @@ ap.add_argument("--seed", type=lambda x: int(x, 0), default=0,
                 help="Zobrist seed; re-run a proof under a second seed to rule "
                      "out a 64-bit key collision having faked it")
 ap.add_argument("--state", default=None, help="checkpoint path (default solve_state/<hash>.json)")
+ap.add_argument("--force-tt", action="store_true", help="skip the memory sanity check on --tt")
 ap.add_argument("--fresh", action="store_true", help="ignore any existing checkpoint")
 args = ap.parse_args()
+
+def check_tt_size(bits):
+    """Bound the table against physical RAM BEFORE allocating.
+
+    calloc cannot be trusted for this: macOS and default-configured Linux
+    overcommit, so a wildly oversized request returns a valid pointer and the
+    process then grows without bound as the search touches pages, taking the
+    machine down with it. Overnight runs must not be able to do that.
+    """
+    want = (1 << bits) * 16
+    total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    safe_bits = (total // 2 // 16).bit_length() - 1     # largest table <= half of RAM
+    if want > total // 2 and not args.force_tt:
+        sys.exit(f"--tt {bits} wants {want / 2**30:.1f} GiB, over half of this "
+                 f"machine's {total / 2**30:.0f} GiB of RAM. The allocation would "
+                 f"appear to succeed (this OS overcommits) and then swap the "
+                 f"machine to death as the search touches pages.\n"
+                 f"Largest safe value here is --tt {safe_bits} "
+                 f"({(1 << safe_bits) * 16 / 2**30:.0f} GiB); --force-tt overrides.")
+    free = free_bytes()
+    print(f"table {want / 2**30:.2f} GiB of {total / 2**30:.0f} GiB RAM"
+          + (f", ~{free / 2**30:.1f} GiB currently free" if free else ""), flush=True)
+    if free and want > free * 0.8:
+        print(f"  WARNING: the table is close to or above currently free memory. "
+              f"Overnight this will swap and throughput will collapse. "
+              f"Consider --tt {bits - 1} ({(1 << (bits-1)) * 16 / 2**30:.1f} GiB) "
+              f"or closing other apps.", flush=True)
+
+
+def free_bytes():
+    """Free + inactive (reclaimable) memory, or 0 if it cannot be determined."""
+    try:
+        out = subprocess.run(["vm_stat"], capture_output=True, text=True, timeout=5).stdout
+        page = int(out.split("page size of ")[1].split(" ")[0])
+        vals = {}
+        for line in out.splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                vals[k.strip()] = v.strip().rstrip(".")
+        return (int(vals["Pages free"]) + int(vals["Pages inactive"])) * page
+    except Exception:
+        return 0
+
 
 # checkpoint identity: everything that changes what a depth result MEANS
 ident = hashlib.sha1(
@@ -61,7 +107,10 @@ state_path.parent.mkdir(parents=True, exist_ok=True)
 
 if args.seed:
     E.lib.th_seed(args.seed)
-E.lib.th_tt_init(args.tt)
+check_tt_size(args.tt)
+if E.lib.th_tt_init(args.tt) != 0:
+    sys.exit(f"could not allocate a 2^{args.tt}-entry table "
+             f"({(1 << args.tt) * 16 // 2**20} MiB). Use a smaller --tt.")
 
 state = {"tfen": args.tfen, "color": args.color, "seed": args.seed, "tt_bits": args.tt,
          "proven_no_win_through": 0, "result": None, "depths": []}

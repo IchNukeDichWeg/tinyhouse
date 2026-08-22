@@ -302,11 +302,20 @@ static _Thread_local uint32_t tl_jitter = 0;   /* helper-thread ordering noise *
 static _Atomic uint64_t g_nodes;
 static volatile int g_abort = 0;
 
-void th_tt_init(int log2_entries) {
+/* Returns 0 on success, -1 if the table could not be allocated.
+ * NOTE: on an overcommitting OS (macOS, default Linux) calloc SUCCEEDS for a
+ * request far larger than RAM and the process then balloons as the search
+ * touches pages. So this return value is not a size check - callers must
+ * bound log2_entries against physical memory before calling (solve_hunt.py
+ * does). A genuinely failed allocation is survivable, since every tt access
+ * is NULL-guarded, but the search would then run with no transposition table
+ * at all, which is slow enough to look like a hang. */
+int th_tt_init(int log2_entries) {
     if (tt) free(tt);
     uint64_t n = 1ULL << log2_entries;
     tt = calloc(n, sizeof(TTEntry));
     tt_mask = n - 1;
+    return tt ? 0 : -1;
 }
 
 static void nodes_flush(void) {

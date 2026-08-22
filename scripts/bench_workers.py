@@ -41,7 +41,8 @@ best = None
 for w in counts:
     times, nodes = [], []
     for _ in range(args.repeats):
-        E.lib.th_tt_init(args.tt)          # fresh table: no cross-run seeding
+        if E.lib.th_tt_init(args.tt) != 0:   # fresh table: no cross-run seeding
+            sys.exit(f"could not allocate a 2^{args.tt}-entry table; use a smaller --tt")
         c = E.to_c(pos)
         n0 = E.lib.th_nodes()
         t0 = time.perf_counter()

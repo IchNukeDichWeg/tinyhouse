@@ -26,7 +26,7 @@ void th_make(THPos *p, uint16_t m);
 int th_result(THPos *p);
 uint64_t th_perft(THPos *p, int depth);
 uint64_t th_key(const THPos *p);
-void th_tt_init(int log2_entries);
+int th_tt_init(int log2_entries);
 void th_seed(uint64_t s);
 int th_tt_save(const char *fname);
 int th_tt_load(const char *fname);
