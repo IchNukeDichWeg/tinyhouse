@@ -529,3 +529,67 @@ def test_the_node_counter_is_cumulative_and_ignores_perft(tt):
     n2 = tt.lib.th_nodes()
     assert tt.lib.th_perft(tt.to_c(T.Position.start()), 5) == 16021
     assert tt.lib.th_nodes() == n2, "th_perft now feeds g_nodes; update the callers"
+
+
+def test_solve_hunt_resumes_from_its_checkpoint(tmp_path):
+    """TH-26: resume is the documented overnight workflow and nothing tested it.
+
+    Three runs against one scratch checkpoint: prove through depth 8, resume
+    and continue at 10 without redoing 6 or 8, then run again with --fresh and
+    watch it start over from 6. The checkpoint identity is also checked, since
+    an inherited checkpoint from a different engine build would silently
+    launder one engine's proof into another's (THB-07).
+    """
+    import json
+
+    state = tmp_path / "s.json"
+    def hunt(*extra):
+        r = subprocess.run(
+            [sys.executable, str(DIR / "solve_hunt.py"), "0", "--tt", "20",
+             "--state", str(state), *extra],
+            cwd=DIR, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        return r.stdout
+
+    first = hunt("--maxdepth", "8")
+    assert "depth  6" in first and "depth  8" in first
+    saved = json.loads(state.read_text())
+    assert saved["proven_no_win_through"] == 8
+    assert [d["depth"] for d in saved["depths"]] == [6, 8]
+    assert state.with_suffix(".tt").exists()
+
+    second = hunt("--maxdepth", "10")
+    assert "resumed from" in second and "table reloaded" in second
+    assert "depth  6" not in second and "depth 10" in second
+    assert json.loads(state.read_text())["proven_no_win_through"] == 10
+
+    third = hunt("--maxdepth", "8", "--fresh")
+    assert "resumed from" not in third and "depth  6" in third
+
+    # a checkpoint from another build must not be inherited
+    poisoned = json.loads(state.read_text())
+    poisoned["build"] = poisoned["build"] ^ 1
+    state.write_text(json.dumps(poisoned))
+    fourth = hunt("--maxdepth", "6")
+    assert "differs in build; starting fresh" in fourth
+
+
+def test_state_count_cross_check_and_headline():
+    """TH-33: the headline state-space figure had nothing verifying its
+    arithmetic, and the script carried a placements() stub that raised
+    NotImplementedError and was never called.
+
+    The full count cannot be enumerated -- that is the point of it -- so what
+    is checked is the METHOD on a sub-problem countable both ways. The headline
+    is pinned here against RULES.md so the two cannot drift apart silently.
+    """
+    r = subprocess.run([sys.executable, str(DIR / "scripts" / "state_count.py"), "--verify"],
+                       cwd=DIR, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "AGREE" in r.stdout
+
+    r = subprocess.run([sys.executable, str(DIR / "scripts" / "state_count.py")],
+                       cwd=DIR, capture_output=True, text=True)
+    assert "17,669,515,462,968" in r.stdout
+    assert "4,417,378,865,742" in r.stdout
+    assert "17,669,515,462,968" in (DIR / "RULES.md").read_text()

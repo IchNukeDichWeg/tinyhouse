@@ -6,8 +6,9 @@ pawns only on ranks 2-3 (8 squares), promoted pieces only from the 2 pawn-origin
 units, hands hold raw types. Not counted: side-not-to-move-in-check exclusion,
 reachability. So this is an upper bound.
 """
+from collections import Counter
+from itertools import combinations_with_replacement, product
 from math import comb
-from itertools import combinations_with_replacement
 
 SQ = [(f, r) for r in range(4) for f in range(4)]
 MID = {(f, r) for (f, r) in SQ if r in (1, 2)}  # ranks 2-3
@@ -26,14 +27,6 @@ for a in SQ:
 # P-origin unit classes: 0 wp,1 bp (board pawns, mid only), 2-7 promoted board
 # pieces (wF* wU* wW* bF* bU* bW*, any square), 8 white hand, 9 black hand.
 # F/U/W-origin unit classes: 0 white board, 1 black board, 2 white hand, 3 black hand.
-def placements(np_board, nother_board, mid_free, any_free):
-    """Place np_board indistinct-per-class pawns and nother_board other pieces.
-    Caller pre-multiplies per-class multiset factors; here classes are already
-    distinct so it's ordered choice of squares: pawns from mid_free, others from
-    remaining. Pawns of the two colors are distinct classes; handled by caller
-    passing per-class counts. This helper handles only totals with same-domain."""
-    raise NotImplementedError  # replaced by inline logic below
-
 total = 0
 P_CLASSES = list(range(10))
 FUW_CLASSES = list(range(4))
@@ -47,10 +40,6 @@ for m, kp in king_pairs.items():
                     # count board pieces
                     pawns = {0: 0, 1: 0}
                     others = 0  # promoted + raw FUW on board (any square)
-                    dup = 1  # same-class duplicates -> placements use comb not perm
-                    for grp in (pu, fu, uu, wu):
-                        if grp[0] == grp[1]:
-                            dup *= 1  # multiset: identical units, one assignment
                     for c in pu:
                         if c in (0, 1):
                             pawns[c] += 1
@@ -72,7 +61,6 @@ for m, kp in king_pairs.items():
                     # other board pieces: distinct classes except identical pairs
                     free = free0 - npw - npb
                     # group same-class board pieces to use comb
-                    from collections import Counter
                     boardc = Counter()
                     for c in pu:
                         if 2 <= c < 8:
@@ -86,5 +74,66 @@ for m, kp in king_pairs.items():
                         free -= cnt
                     total += kp * ways
 total *= 2  # side to move
-print(f"upper bound on states: {total:,}")
-print(f"/4 symmetry          : {total // 4:,}")
+
+
+# -- cross-check (TH-33) ----------------------------------------------------
+# The headline figure cannot be enumerated -- that is the whole point of it --
+# so what is checked is the METHOD, on a sub-problem small enough to count both
+# ways: two kings plus the two W units and nothing else. The analytic side uses
+# exactly the technique the full count uses (class multisets placed with comb);
+# the brute-force side enumerates states one at a time and shares no line of
+# code with it. Agreement validates the technique, not the arithmetic of the
+# larger loops -- say so rather than implying more.
+def sub_analytic():
+    t = 0
+    for m, kp in king_pairs.items():
+        for grp in combinations_with_replacement(range(4), 2):   # 0 wb 1 bb 2 wh 3 bh
+            free, ways = 14, 1
+            counts = Counter(c for c in grp if c < 2)
+            for cnt in counts.values():
+                ways *= comb(free, cnt)
+                free -= cnt
+            t += kp * ways
+    return t * 2
+
+
+def sub_brute():
+    """Enumerate the same states directly: place both kings, then distribute the
+    two W units over (white board, black board, white hand, black hand)."""
+    seen = set()
+    for wk in range(16):
+        for bk in range(16):
+            a, b = (wk % 4, wk // 4), (bk % 4, bk // 4)
+            if wk == bk or adjacent(a, b):
+                continue
+            free = [s for s in range(16) if s not in (wk, bk)]
+            for placement in product(["wb", "bb", "wh", "bh"], repeat=2):
+                boards = [i for i, p in enumerate(placement) if p.endswith("b")]
+                for squares in product(free, repeat=len(boards)):
+                    if len(set(squares)) != len(squares):
+                        continue
+                    board = {wk: "K", bk: "k"}
+                    for i, sq in zip(boards, squares):
+                        board[sq] = "W" if placement[i] == "wb" else "w"
+                    hand = (sum(1 for i, p in enumerate(placement) if p == "wh"),
+                            sum(1 for i, p in enumerate(placement) if p == "bh"))
+                    for stm in (0, 1):
+                        seen.add((tuple(sorted(board.items())), hand, stm))
+    return len(seen)
+
+
+# The symmetry group of order 4 (identity, file mirror, sigma, and their
+# composition) acts FREELY here, so total/4 is exact rather than a lower bound:
+# the file mirror fixes no square (a<->d, b<->c, no central file), so the white
+# king can never map to itself; and sigma maps white pieces to black ones, so no
+# state is fixed by it either. No Burnside correction is needed or correct.
+if __name__ == "__main__":
+    import sys
+
+    if "--verify" in sys.argv:
+        a, b = sub_analytic(), sub_brute()
+        print(f"sub-problem (2 kings + 2 W units): analytic {a:,}  brute force {b:,}  "
+              f"{'AGREE' if a == b else 'DISAGREE'}")
+        sys.exit(0 if a == b else 1)
+    print(f"upper bound on states: {total:,}")
+    print(f"/4 symmetry          : {total // 4:,}")

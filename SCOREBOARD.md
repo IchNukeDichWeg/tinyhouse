@@ -72,6 +72,8 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 39 | TH-35 | 3 | **CONFIRMED** | d1c2 now reports -29990 with snd 2 (SND_UB); all five quiet moves snd 0 | see below |
 | 40 | TH-24 | 3 | **CONFIRMED** | walk now starts from all 5 oracle roots (was 1); +0.2s | see below |
 | 41 | TH-23 | 3 | **CONFIRMED** | 94,624 comparisons, 0 mismatches; catches 3 of 3 planted geometry bugs | see below |
+| 42 | TH-26 | 3 | **CONFIRMED** | resume, --fresh and build-mismatch paths all pinned by subprocess | see below |
+| 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -980,3 +982,33 @@ in `tinyhouse.attacked()`:
 direction only. `ORTH`/`DIAG`/`PCAPS` are also consumed by `pseudo_moves`
 alongside `KINGN` and `MAO_MOVES`, and that direction is still verified by
 nothing but perft.
+
+### TH-26 · `solve_hunt` resume/checkpoint round trip
+
+Three runs against one scratch checkpoint, plus a fourth: prove through depth
+8; resume and continue at 10 without redoing 6 or 8 (`resumed from ... table
+reloaded`); `--fresh` starts over from 6; and a checkpoint whose recorded
+`build` is altered prints `differs in build; starting fresh` rather than
+laundering one engine's proof into another's. Resume is the documented
+overnight workflow and had no test at all.
+
+### TH-33 · cross-check `state_count.py`, delete its dead stub
+
+The `placements()` stub raised `NotImplementedError` and was called from
+nowhere; a `dup` variable was computed, multiplied only by 1, and never used;
+`Counter` was imported inside the innermost of four nested loops. All gone, and
+the headline is unchanged at **17,669,515,462,968** (`/4` = 4,417,378,865,742),
+matching `RULES.md` to the digit.
+
+**The arithmetic now has something checking it.** The full count cannot be
+enumerated -- that is the point of it -- so `--verify` counts a sub-problem two
+ways: two kings plus the two W units, analytically by the same class-multiset
+technique the full count uses, and by brute-force enumeration sharing no line
+of code with it. **131,976 both ways.** That validates the technique, not the
+arithmetic of the larger loops, and the comment says exactly that.
+
+`opus-5`'s kill of the Burnside claim is confirmed by argument and recorded in
+the file: the group acts **freely** here, so `total/4` is exact. The file mirror
+fixes no square (a<->d, b<->c, no central file), so the white king can never map
+to itself, and sigma maps white pieces to black ones. No correction is needed
+or correct.
