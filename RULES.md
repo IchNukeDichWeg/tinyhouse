@@ -147,6 +147,27 @@ multisets of raw types, side to move):
 - Not counted: side-not-to-move-in-check exclusion and reachability, so the true
   reachable count is smaller, but even 0.1% reachability leaves ~1.8e10 states.
 
+### Reachable, as opposed to expressible
+
+`scripts/census.py` walks the game graph from the start and deduplicates on the
+exact state, so these are counts and not estimates — no hashing, no collision
+tail. Plies 1-8 are verified exactly by that script; plies 9-10 are from a C run
+(185s wall, 3.06 GB RSS, hashbits 27, 16-byte keys — quote those parameters with
+the number).
+
+| ply | new | cumulative | growth |
+|---|---|---|---|
+| 1 | 6 | 7 | — |
+| 2 | 33 | 40 | 5.50 |
+| 4 | 1,220 | 1,453 | 6.32 |
+| 6 | 45,979 | 55,183 | 5.93 |
+| 8 | 1,689,902 | 2,036,092 | 5.81 |
+| 9 | 9,630,829 | 11,666,921 | 5.70 |
+| 10 | 49,003,553 | 60,670,474 | 5.09 |
+
+Plies 1 and 2 equal perft 1 and 2, as they must — nothing transposes that early.
+Growth sits near 6 and begins to bend by ply 10.
+
 **Verdict: a full strong solve (retrograde DB over all states) is infeasible** on a
 desktop — 4.4e12 slots at even 2 bits is >1 TB before indexing, and crazyhouse has no
 material-based decomposition into subgames (material never leaves play, so there are no

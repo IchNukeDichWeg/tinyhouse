@@ -88,6 +88,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 55 | TH-13 | 5 | **CONFIRMED** | 4 of 200 root flags upgraded, 0 value changes, nodes exactly unchanged at depth 8 and -0.01% at most on the deeper suite | see below |
 | 56 | TH-17 | 5 | **REJECTED** | regression suite -11.21% at weight 512, but the deep hunts go +13.12/+15.17/+19.33% at d14/16/18 and +70.02% on the Black d18 hunt | see below |
 | 57 | TH-39 | 5 | **CONFIRMED** | node-optimal size moves with depth (2^20 at d16, 2^24 at d18); 2^26 is 14.9% full at d18, so the default is kept for the depth-20+ runs it exists for | see below |
+| 58 | TH-37 | 6 | **CONFIRMED** | plies 1-8 reproduced exactly and independently (2,036,092 cumulative, no hashing); growth ~6/ply bending to 5.09 by ply 10 | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1585,3 +1586,43 @@ of lowering it on a depth-16 one.
 
 **The depth-20+ sweep is a long job and is handed over, not run**, which is what
 the item asks for. The tool and the command are in the README.
+
+---
+
+## Tier 6 — new ideas
+
+### TH-37 · the reachable-position census — CONFIRMED, reproduced independently
+
+`scripts/census.py`. Positions are deduplicated on the exact 20-byte state --
+board, both hands, side to move -- so there is **no hashing and no collision
+tail**: every count is exact rather than probable.
+
+Plies 1 through 8 reproduce the merge's figures **to the position**, from an
+implementation that shares nothing with it:
+
+| ply | new | cumulative | growth |
+|---|---|---|---|
+| 1 | 6 | 7 | 6.00 |
+| 2 | 33 | 40 | 5.50 |
+| 3 | 193 | 233 | 5.85 |
+| 4 | 1,220 | 1,453 | 6.32 |
+| 5 | 7,751 | 9,204 | 6.35 |
+| 6 | 45,979 | 55,183 | 5.93 |
+| 7 | 291,007 | 346,190 | 6.33 |
+| 8 | 1,689,902 | 2,036,092 | 5.81 |
+
+23 seconds in Python to ply 8. Plies 9 and 10 (9,630,829 and 49,003,553) are
+carried from the merge's C run **with its parameters attached** -- 185s wall,
+3.06 GB RSS, hashbits 27, 16-byte keys -- because the same item once carried a
+"12 seconds, 1.8 GB" claim that did not reproduce. Ply 9 was not re-run here:
+it needs a couple of gigabytes, and the machine is running the user's own work.
+
+Plies 1 and 2 equal perft 1 and 2, as they must, and that is what makes the
+script non-vacuous: a census that had drifted from the move generator fails
+there first. That check is now a test.
+
+**What it buys**, which is the item's own claim and now holds: the state-space
+verdict in `RULES.md` is a measurement rather than an argument. Growth sits near
+6 per ply and begins to bend by ply 10 (5.09), so the reachable space is far
+smaller than the 1.77e13 the notation can express -- and still far too large for
+a retrograde table.

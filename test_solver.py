@@ -633,3 +633,23 @@ def test_a_shallow_search_does_not_claim_the_draw(tt):
         tt.lib.th_clear_history()
         v = tt.lib.th_solve(tt.to_c(T.Position.from_tfen("2K1/4/4/2k1[-] w")), depth, bm, snd)
         assert v == 0 and snd[0] != 3, (depth, snd[0])
+
+
+def test_reachable_census_low_plies():
+    """TH-37. The reachable count is what prices a strong solve and a df-pn
+    search; the syntactic 1.77e13 is an upper bound that says nothing about
+    what a game can reach.
+
+    Plies 1 and 2 must equal perft 1 and 2, since nothing transposes that early,
+    and that is what makes this non-vacuous -- a census that had drifted from
+    the move generator would fail there first.
+    """
+    sys.path.insert(0, str(DIR / "scripts"))
+    import census
+
+    assert census.KNOWN[1] == 6 and census.KNOWN[2] == 33      # == perft(1), perft(2)
+    r = subprocess.run([sys.executable, str(DIR / "scripts" / "census.py"), "6"],
+                       cwd=DIR, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "MISMATCH" not in r.stdout
+    assert "55,183" in r.stdout

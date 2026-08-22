@@ -125,7 +125,7 @@ line per item.
 
 | ID | Item | Status |
 |---|---|---|
-| TH-37 | reachable-position census | PENDING |
+| TH-37 | reachable-position census | **CONFIRMED** |
 | TH-36 | df-pn as a second engine | PENDING |
 | TH-38 | bounded retrograde terminal shell | PENDING |
 
