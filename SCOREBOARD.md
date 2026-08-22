@@ -58,6 +58,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 25 | TH-03 | 2 | **CONFIRMED** | PV replay: 9/9 plies legal, 0 repetitions, terminal result -1; perft(7) 1,355,253 unchanged | see below |
 | 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | see below |
 | 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | see below |
+| 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -681,3 +682,17 @@ transcription check rather than independent derivation, since `tinyhouse.c`
 declares itself a mirror of `tinyhouse.py`; and `perft(6)`/`perft(7)` are
 config-drift signatures, pinning that the engine has not changed rather than
 that it was ever right. **Not wrong**: every oracle number itself.
+
+### TH-07 · "exists exactly twice" vs code rejecting only `> 2` — MOOT
+
+Already resolved, and not deliberately: the comment moved into
+`Position.validate()` during THB-05's refactor and was rewritten as "exists **at
+most** twice in the game (board plus both hands)", which is exactly the change
+this item asks for. Verified at `tinyhouse.py:204`. Implementing it again would
+be a no-op, so it is recorded MOOT rather than CONFIRMED.
+
+The item's own reasoning is re-measured and holds: of the 33 TFEN literals in
+the repo's Python, **8 are full, 11 are under-full** and 14 are deliberately
+malformed rejection cases. Enforcing `n != 2` would reject most of the rules
+suite, so softening the doc was the right direction and tightening the code
+would have been wrong.
