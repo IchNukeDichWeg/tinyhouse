@@ -35,6 +35,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 2 | THB-02 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
 | 3 | THB-03 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
 | 4 | THB-05 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; whole-suite cost of validating every to_c call is 4.63s -> 4.68s (noise) | see below |
+| 5 | THB-04 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; guard is a no-op on legal input (no king capture is generated from a validated position) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -132,3 +133,27 @@ without an illegal position or a fabricated move.
 
 perft(7) unchanged at 1,355,253. Suite cost of validating on every `to_c`
 (~1,200 calls in the parity walk alone): 4.63s -> 4.68s, inside the noise.
+
+### THB-04 · `make`/`unmake` wrote `hands[us][4]` on a king capture
+
+Both directions reproduced against a pre-fix build of the same tree.
+
+**Black capturer** (white king a1, black wazir a2, black king d4, Black to
+move): `th_moves` alone returned with the caller's `stm` flipped **1 -> 0**.
+`unmake` restores `stm` and *then* decrements the alias, so the corruption is
+precisely the half that survives the call.
+
+**White capturer** (white wazir a1, black king b1, white king d4): after
+`th_make(Wa1xb1)`, `hands[1] == [1, 0, 0, 0]` on the pre-fix build and
+`[0, 0, 0, 0]` on the shipped one -- a black **pawn** fabricated out of
+`hands[0][4]`, which is the same byte as `hands[1][0]`.
+
+**The paired-perft oracle the backlog asks for does not fire, and that is worth
+recording.** On this position perft(1/2/3) is 5/12/63 on *both* builds. The
+kingless side's `king_sq` returns -1, `attacked()` reads `ORTH[-1]` and reports
+"attacked", so every phantom pawn drop is filtered straight back out as leaving
+the king in check. Two defects cancel. The hand array itself is the oracle, not
+a node count.
+
+perft(7) from the start unchanged at 1,355,253, so the guard is a no-op on
+legal input.

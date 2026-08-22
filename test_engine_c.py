@@ -59,3 +59,42 @@ def test_to_c_rejects_an_unvalidated_position():
     overfull.hands[T.WHITE][T.P] = 9
     with pytest.raises(ValueError):
         engine_c.to_c(overfull)
+
+
+def test_king_capture_does_not_write_past_the_hand_array():
+    """THB-04: make()/unmake() indexed hands[us][TYPE(cap)] with TYPE(K) == 4,
+    one past `int8_t hands[2][4]`.
+
+    The struct is {board[16], hands[2][4], stm} with no padding, so
+    &hands[1][4] is &stm and the aliasing is deterministic rather than
+    undefined-in-practice. Being an intra-object overwrite, ASan tracks the
+    object boundary and stays silent. unmake restores stm and *then* decrements
+    the alias, so the corruption is what survives the call: th_moves alone
+    returned with the caller's stm flipped from 1 to 0.
+
+    THPos is built directly here on purpose. This is about the C library not
+    depending on a Python-side invariant for memory consistency, and to_c now
+    refuses to pass it an illegal position at all.
+    """
+    c = engine_c.ffi.new("THPos *")
+    c.board[0] = 5       # white king a1
+    c.board[4] = 20      # black wazir a2, attacking it
+    c.board[15] = 21     # black king d4
+    c.stm = 1            # black to move and able to capture the white king
+    engine_c.lib.th_moves(c, engine_c.ffi.NULL)
+    assert c.stm == 1
+    assert [c.hands[0][t] for t in range(4)] == [0, 0, 0, 0]
+    assert [c.hands[1][t] for t in range(4)] == [0, 0, 0, 0]
+
+    # The other direction: hands[0][4] aliases hands[1][0], so White capturing
+    # a black king fabricated a black PAWN in hand. Perft does not catch this
+    # one -- the kingless side's king_sq returns -1 and attacked() reads
+    # ORTH[-1], which reports "attacked" and filters every phantom drop back
+    # out again. Two defects cancelling, so the hand array is the oracle.
+    w = engine_c.ffi.new("THPos *")
+    w.board[0] = 4       # white wazir a1
+    w.board[1] = 21      # black king b1, en prise
+    w.board[15] = 5      # white king d4
+    w.stm = 0
+    engine_c.lib.th_make(w, T.mv(0, 1))
+    assert [w.hands[1][t] for t in range(4)] == [0, 0, 0, 0]

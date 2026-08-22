@@ -124,7 +124,12 @@ static void make(THPos *p, uint16_t m, Undo *u) {
         int frm = M_FROM(m), to = M_TO(m);
         int cap = p->board[to];
         u->captured = cap;
-        if (cap) p->hands[us][PROMOTED(cap) ? P : TYPE(cap)]++;
+        /* THB-04: TYPE(K) is 4 and hands is int8_t[2][4], so a king capture
+         * wrote one past the row. The struct has no padding, so &hands[1][4]
+         * is &stm and the aliasing is deterministic - and being intra-object,
+         * no sanitizer sees it. Kings are never in hand, so skipping the
+         * increment is also the right rule, not just the safe one. */
+        if (cap && TYPE(cap) != K) p->hands[us][PROMOTED(cap) ? P : TYPE(cap)]++;
         int pc = p->board[frm];
         if (M_PROMO(m)) pc = PIECE(us, M_PROMO(m), 1);
         p->board[to] = pc; p->board[frm] = 0;
@@ -143,7 +148,10 @@ static void unmake(THPos *p, const Undo *u) {
         int pc = p->board[to];
         if (M_PROMO(m)) pc = PIECE(us, P, 0);
         p->board[frm] = pc; p->board[to] = u->captured;
-        if (u->captured) p->hands[us][PROMOTED(u->captured) ? P : TYPE(u->captured)]--;
+        /* mirror of the guard in make(); this is the half that survives the
+         * call, because stm is restored on the line above and then clobbered */
+        if (u->captured && TYPE(u->captured) != K)
+            p->hands[us][PROMOTED(u->captured) ? P : TYPE(u->captured)]--;
     }
 }
 
