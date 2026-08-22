@@ -105,7 +105,7 @@ line per item.
 | ID | Item | Status |
 |---|---|---|
 | TH-08 | horizon fast path | **CONFIRMED** |
-| TH-09 | drops from a precomputed empty-square mask | PENDING |
+| TH-09 | drops from a precomputed empty-square mask | **CONFIRMED** |
 | TH-10 | incremental Zobrist key | PENDING |
 | TH-12 | hoist `king_sq` out of the legality loop | PENDING |
 | TH-11 | fast legality (perft/`th_moves` half only) | PENDING |

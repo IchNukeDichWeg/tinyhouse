@@ -77,6 +77,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | `d0e1350` |
 | 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | `94ea4f2` |
 | 46 | TH-08 | 4 | **CONFIRMED** | +4.04% solve d14, +3.69/+3.93% hunt d16 vs a 0.2-0.4% control; NULL on drop-heavy; node-identical | see below |
+| 47 | TH-09 | 4 | **CONFIRMED** | +5.24% solve d14, +5.56/+5.15% hunt d16, +6.06% drop-heavy vs 0.0-0.8% controls; perft +1.00% (reported 1.071x); node-identical | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1133,3 +1134,33 @@ tree, so the restructuring alone (hoisting `pseudo_moves` past the horizon
 branch and moving the existence test into its own function) costs about 2.4%,
 and the fast path itself buys about 6.5% over that. The net gain over the
 previous tree, which is the number that counts, is **+3.9%**.
+
+### TH-09 · drops from a precomputed empty-square set — CONFIRMED
+
+Node-identical on every arm (1,319,149 / 9,616,663 / 97,099 / perft 1,355,253),
+digest unchanged. Ascending square order preserved deliberately: emission order
+is what move ordering sees.
+
+| workload | control | TH-09 | verdict |
+|---|---|---|---|
+| solve d14, start | +0.10% | **+5.24%** | signal |
+| hunt d16, start | -0.02% | **+5.56%** | signal |
+| hunt d16, start (second session) | +0.26% | **+5.15%** | signal |
+| solve d12, drop-heavy | -0.78% | **+6.06%** | signal |
+| perft(7), start | +0.43% | +1.00% | marginal |
+
+**Toggle-off is a clean pin here**, unlike TH-08: `DROP_EMPTY_MASK 0` measures
+**-0.04%** against the original tree, node- and time-identical, because the
+`#else` branch is literally the old loop.
+
+**Correction to the backlog on perft.** The reported perft figure is 1.071x;
+measured, it is **1.010x**, seven times smaller. The reason is visible in the
+change itself -- the mask loop is gated on a non-empty hand, and hands are
+empty for most of a perft from the start position, so there is nothing to save.
+The search figures do broadly hold up (reported 1.063x / 1.087x, measured
+1.052x / 1.056x), and the drop-heavy case is the best of them at 1.061x.
+
+**The trap the item names is left alone on its evidence**: the mask is built in
+its own gated loop and NOT accumulated inside the piece loop, which already
+walks all 16 squares and looks like the better place for it. That variant was
+reported 6.5% slower and was not re-litigated here.

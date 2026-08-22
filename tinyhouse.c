@@ -155,6 +155,10 @@ static void unmake(THPos *p, const Undo *u) {
     }
 }
 
+/* 0 = pre-change behaviour, the node-identity pin; 1 = shipped (see TH-09
+ * below, at the drop loop) */
+#define DROP_EMPTY_MASK 1
+
 static int pseudo_moves(const THPos *p, uint16_t *out) {
     int us = p->stm, n = 0;
     const int8_t *b = p->board;
@@ -198,6 +202,30 @@ static int pseudo_moves(const THPos *p, uint16_t *out) {
             }
         }
     }
+    /* TH-09: with anything in hand the empty-square scan ran once per piece
+     * TYPE, up to four times over the same 16 squares. Collect them once.
+     * Ascending square order is preserved deliberately: emission order is what
+     * move ordering sees, and changing it would break node identity, which is
+     * this change's whole acceptance test.
+     *
+     * The mask is built in its OWN gated loop and NOT accumulated inside the
+     * piece loop above, which already walks all 16 squares and looks like the
+     * better place for it. That version measured 6.5% SLOWER. */
+#if DROP_EMPTY_MASK
+    if (p->hands[us][0] | p->hands[us][1] | p->hands[us][2] | p->hands[us][3]) {
+        uint8_t empt[16];
+        int ne = 0;
+        for (int s = 0; s < 16; s++) if (!b[s]) empt[ne++] = s;
+        for (int t = 0; t < 4; t++) {
+            if (!p->hands[us][t]) continue;
+            for (int i = 0; i < ne; i++) {
+                int s = empt[i];
+                if (t == P && ((s >> 2) == 0 || (s >> 2) == 3)) continue;
+                out[n++] = MV_DROP(t, s);
+            }
+        }
+    }
+#else
     for (int t = 0; t < 4; t++) {
         if (!p->hands[us][t]) continue;
         for (int s = 0; s < 16; s++) {
@@ -206,6 +234,7 @@ static int pseudo_moves(const THPos *p, uint16_t *out) {
             out[n++] = MV_DROP(t, s);
         }
     }
+#endif
     return n;
 }
 
