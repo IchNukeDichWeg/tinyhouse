@@ -22,6 +22,17 @@ ENGINE_VERSION = 2
 
 TT_BITS = 24
 
+# THB-09: only cache a result the engine PROVED. Rows are keyed on
+# (tfen, depth, version), but th_solve probes a table earlier requests filled
+# and cuts on a proven entry regardless of depth, so an unproven answer is a
+# function of live TT state rather than of its key -- ask depth 14 and then
+# depth 6 on the same server and the depth-6 row holds the depth-14 answer for
+# 15 nodes, permanently. A proven value has no such problem: it is the true
+# game value, so it cannot be contradicted by any later, deeper search.
+# The cost, named rather than discovered later: unproven positions recompute on
+# every request, so scripts/build_book.py only precomputes proven ones.
+CACHE_ONLY_PROVEN = True
+
 # ponytail: one global engine lock -- the C search uses global TT/path state;
 # per-request engines if this ever serves more than one user
 ENGINE_LOCK = threading.Lock()
@@ -47,6 +58,10 @@ def init(db_path=None, tt_bits=TT_BITS):
     db.execute("DELETE FROM analysis WHERE depth < 1")
     db.commit()
     return db
+
+
+# mirrors MATE_BOUND in tinyhouse.c: |v| above this is a mate score
+T_MATE_BOUND = 29000
 
 
 def white_view(v: int, stm: int) -> int:
@@ -77,13 +92,15 @@ def analyze(tfen: str, depth: int) -> dict:
     moves = sorted(
         ({"move": T.move_str(mvs[i]), "value": white_view(vals[i], pos.stm)} for i in range(n)),
         key=lambda x: -x["value"] if pos.stm == T.WHITE else x["value"])
+    proven = abs(v) > T_MATE_BOUND or snd[0] == 3
     out = {"tfen": tfen, "depth": depth, "value": white_view(v, pos.stm), "snd": snd[0],
            "best": T.move_str(bm[0]) if bm[0] else None, "moves": moves,
-           "nodes": nodes, "time": round(dt, 3), "cached": False}
-    with DB_LOCK:
-        db.execute("INSERT OR REPLACE INTO analysis VALUES (?,?,?,?)",
-                   (tfen, depth, ENGINE_VERSION, json.dumps(out)))
-        db.commit()
+           "proven": proven, "nodes": nodes, "time": round(dt, 3), "cached": False}
+    if proven or not CACHE_ONLY_PROVEN:
+        with DB_LOCK:
+            db.execute("INSERT OR REPLACE INTO analysis VALUES (?,?,?,?)",
+                       (tfen, depth, ENGINE_VERSION, json.dumps(out)))
+            db.commit()
     return out
 
 

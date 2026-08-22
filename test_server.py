@@ -40,6 +40,7 @@ def srv(tmp_path):
 
 
 START = "fuwk/3p/P3/KWUF[-] w"
+MATE9 = "fuwk/3p/P1F1/KWU1[-] b"        # Black mates in 9
 
 
 def test_position_and_analyze_round_trip(srv):
@@ -52,8 +53,14 @@ def test_position_and_analyze_round_trip(srv):
     assert code == 200
     assert a["depth"] == 8 and a["cached"] is False and a["nodes"] > 0
     assert len(a["moves"]) == 6
-    code, again = srv("/api/analyze", tfen=START, depth=8)
-    assert again["cached"] is True and again["value"] == a["value"]
+
+    # Cache hits are asserted on a PROVEN position: since THB-09 only proven
+    # results are stored, because an unproven one is a function of live TT
+    # state rather than of its (tfen, depth) key.
+    code, p = srv("/api/analyze", tfen=MATE9, depth=10)
+    assert code == 200 and p["proven"] is True and p["cached"] is False
+    code, again = srv("/api/analyze", tfen=MATE9, depth=10)
+    assert again["cached"] is True and again["value"] == p["value"]
 
 
 def test_a_malformed_tfen_is_a_400(srv):
@@ -80,3 +87,60 @@ def test_analyze_depth_is_clamped_below_as_well_as_above(srv):
     # and no row with an impossible depth can reach the cache
     rows = srv.module.db.execute("SELECT count(*) FROM analysis WHERE depth < 1").fetchone()
     assert rows[0] == 0
+
+
+
+def test_an_unproven_analysis_is_not_frozen_into_the_cache(srv):
+    """THB-09: rows were keyed on (tfen, depth, version) but the value is a
+    function of live TT state.
+
+    th_solve probes a table earlier requests filled, and the cutoff fires on a
+    proven entry regardless of depth. Asking depth 14 first and then depth 6 on
+    the same server returned the depth-14 answer for 15 nodes -- and stored it
+    permanently under the depth-6 key, so an honest cold depth-6 request could
+    never be served for that key again. The value itself is a genuine proof;
+    what must not be frozen is a result that depends on what preceded it.
+    """
+    srv("/api/analyze", tfen=MATE9, depth=14)
+    code, shallow = srv("/api/analyze", tfen=MATE9, depth=6)
+    assert code == 200
+
+    rows = srv.module.db.execute(
+        "SELECT depth FROM analysis WHERE tfen=? ORDER BY depth", (MATE9,)).fetchall()
+    depths = [r[0] for r in rows]
+    if shallow["value"] < -29000:
+        # served the deep proof: true, depth-independent, fine to keep
+        assert 6 in depths
+    else:
+        # answered honestly at depth 6 and therefore unproven: must not be kept
+        assert 6 not in depths, "an unproven, history-dependent row was cached"
+
+
+def test_an_unproven_shallow_analysis_is_never_cached(srv):
+    """The general rule, independent of ordering: a result that is neither a
+    mate score nor snd == 3 is not the game value, so it must recompute."""
+    code, a = srv("/api/analyze", tfen=START, depth=6)
+    assert code == 200 and abs(a["value"]) < 29000 and a["snd"] != 3
+    row = srv.module.db.execute(
+        "SELECT count(*) FROM analysis WHERE tfen=? AND depth=6", (START,)).fetchone()
+    assert row[0] == 0
+    code, again = srv("/api/analyze", tfen=START, depth=6)
+    assert again["cached"] is False
+
+
+def test_build_book_runs(tmp_path, monkeypatch):
+    """scripts/build_book.py is the only other caller of server.analyze, and it
+    reaches it by import. Nothing covered it, so moving the engine and cache
+    setup out of import broke it silently.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).parent
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}
+    r = subprocess.run([sys.executable, str(root / "scripts" / "build_book.py"),
+                        "6", "0", str(tmp_path / "book.sqlite")],
+                       cwd=tmp_path, capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "positions visited at depth 6" in r.stdout

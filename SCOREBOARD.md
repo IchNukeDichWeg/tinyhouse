@@ -41,6 +41,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 8 | THB-07 | 1 | **CONFIRMED** | foreign-rule dump: rc 0 -> -3; header 24 -> 32 bytes, so pre-existing dumps are invalidated by design | see below |
 | 9 | THB-08 | 1 | **CONFIRMED** | failed save: silent exit-0 -> WARNING + intact previous dump; perft(7) 1,355,253 unchanged | see below |
 | 10 | THB-10 | 1 | **CONFIRMED** | depth 0 and -5 now clamp to 1; repo DB had 0 rows to clean (4 rows, depths 8/14) | see below |
+| 11 | THB-09 | 1 | **CONFIRMED** | unproven rows no longer stored; build_book 8 1 keeps 0 of 7 visited (nothing that shallow is proven) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -263,3 +264,33 @@ row is then frozen into the cache under a key no honest search can reproduce.
 Clamped both ways, and `init()` deletes any `depth < 1` row left in an older
 database. The repo's own `analysis.sqlite` has none (4 rows, depths 8 and 14),
 so this is prophylactic rather than a repair.
+
+### THB-09 · an unproven analysis was frozen into the cache
+
+The mechanism reproduced: `th_solve` probes a table earlier requests filled and
+the cutoff fires on a proven entry regardless of depth, so `analyze()` is not a
+function of `(tfen, depth)` at all. Asking depth 14 and then depth 6 on the same
+server returns the depth-14 answer, and the old code stored it permanently under
+the depth-6 key -- after which an honest cold depth-6 request could never be
+served for that key again.
+
+The value served is **not wrong**, and the fix keeps that distinction. A proven
+result is the true game value: depth-independent, and no later search can
+contradict it, so caching it is sound. An **unproven** result is the one that
+depends on what preceded it, and that is what `CACHE_ONLY_PROVEN` refuses to
+freeze.
+
+**Named cost**: unproven positions now recompute on every request. Measured on
+the book: `build_book.py 8 1` visits 7 positions near the start and stores
+**0** -- nothing that shallow is proven. The script's summary line now reports
+proven-of-visited rather than visited, so the book cannot look bigger than it is.
+
+**A regression I introduced, found here and fixed here**: moving the engine and
+cache setup out of `server.py`'s import (commit `3004d6f`) broke
+`scripts/build_book.py`, which reaches `analyze()` by import and got
+`db is None`. Nothing covered it. It now calls `init()`, takes a database path
+so a test need not touch the repo's, and has a smoke test.
+
+**One test rewritten in the same commit**, not disabled: the round trip
+asserted a cache hit on the start position at depth 8, which is unproven and
+correctly no longer cached. It now asserts the hit on a proven position.
