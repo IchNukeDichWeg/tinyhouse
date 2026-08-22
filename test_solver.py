@@ -232,3 +232,37 @@ def test_the_recorded_proof_line_is_legal_and_repetition_free():
         seen.add(pos.key())
     assert pos.result() == -1        # White, to move, is checkmated
     assert len(MATE9_PV) == 9
+
+
+def test_history_carry_over_is_under_the_callers_control():
+    """TH-19: `history` is thread-local and nothing reset it, so repeats of the
+    same search in one process were not independent samples.
+
+    Measured, five repeats of an identical depth-13 hunt with a fresh table
+    before each: 757,431 / 839,298 / 845,107 / 1,345,672 / 795,066 in one
+    process, against 757,431 five times in five separate processes. This pins
+    both halves at a cheap depth -- that the contamination is real, and that
+    th_clear_history() removes it -- because a benchmark that cannot be
+    reproduced is not a benchmark.
+    """
+    import engine_c as E
+
+    def repeats(clear):
+        out = []
+        for _ in range(4):
+            E.lib.th_tt_init(20)
+            if clear:
+                E.lib.th_clear_history()
+            n0 = E.lib.th_nodes()
+            E.lib.th_mate_hunt(E.to_c(T.Position.from_tfen("fuwk/3p/P3/KWUF[-] w")), 11, 0,
+                               E.ffi.new("uint16_t *"))
+            out.append(E.lib.th_nodes() - n0)
+        return out
+
+    E.lib.th_clear_history()
+    dirty = repeats(False)
+    assert len(set(dirty)) > 1, f"expected in-process drift, got {dirty}"
+
+    clean = repeats(True)
+    assert len(set(clean)) == 1, f"th_clear_history did not make repeats identical: {clean}"
+    assert clean[0] == dirty[0], "the first repeat is the cold-history sample either way"

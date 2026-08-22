@@ -9,7 +9,17 @@ a long run to a worker count.
 
   scripts/bench_workers.py --depth 20 --workers 1,2,4 --repeats 2
 
-Each run uses a fresh transposition table so runs cannot seed each other.
+Each run uses a fresh transposition table AND clears the thread-local history
+table, so runs cannot seed each other. That second half is not optional: the
+history table used to carry over, and five repeats of an identical depth-13
+hunt measured 757,431 / 839,298 / 845,107 / 1,345,672 / 795,066 in one process
+against 757,431 five times in five separate processes. The damage lands
+BETWEEN arms, not within them: this script loops worker counts in the outer
+position, so the first worker count was the only arm that ever contained a
+cold-history sample, and helper threads are always cold - the contamination was
+asymmetric between the workers=1 and workers>1 arms, which is the exact
+comparison this script exists to make.
+
 Cost warning: one run at depth d costs roughly what solve_hunt.py spends on
 that depth, times len(workers) times repeats.
 """
@@ -43,6 +53,7 @@ for w in counts:
     for _ in range(args.repeats):
         if E.lib.th_tt_init(args.tt) != 0:   # fresh table: no cross-run seeding
             sys.exit(f"could not allocate a 2^{args.tt}-entry table; use a smaller --tt")
+        E.lib.th_clear_history()             # ...and a cold history table (TH-19)
         c = E.to_c(pos)
         n0 = E.lib.th_nodes()
         t0 = time.perf_counter()
@@ -51,8 +62,11 @@ for w in counts:
         nodes.append(E.lib.th_nodes() - n0)
     med = statistics.median(times)
     spread = max(times) - min(times)
+    # nodes in full, not rounded to meganodes: "{n/1e6:8.0f}M" printed "1M"
+    # for everything from 500k to 1.5M, which is exactly the range these depths
+    # land in, and nodes are the load-independent metric here.
     print(f"workers {w:2d}  median {med:7.1f}s  spread {spread:6.1f}s  "
-          f"median nodes {statistics.median(nodes)/1e6:8.0f}M  value {v}")
+          f"median nodes {statistics.median(nodes):>14,.0f}  value {v}")
     if best is None or med < best[1]:
         best = (w, med)
 print(f"\nbest at depth {args.depth}: --workers {best[0]} ({best[1]:.1f}s median)")

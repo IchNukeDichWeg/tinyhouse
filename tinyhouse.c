@@ -325,6 +325,25 @@ static _Thread_local uint32_t tl_jitter = 0;   /* helper-thread ordering noise *
 static _Atomic uint64_t g_nodes;
 static volatile int g_abort = 0;
 
+/* TH-19: `history` is thread-local and nothing ever resets it, so repeats of
+ * the same search in one process are NOT independent samples. Measured, five
+ * repeats of an identical depth-13 hunt with a fresh table before each:
+ * 757,431 / 839,298 / 845,107 / 1,345,672 / 795,066 in one process, against
+ * 757,431 five times in five separate processes. A scratch build with the one
+ * memset below made the in-process repeats identical, so history is the sole
+ * carrier.
+ *
+ * Two separate questions, deliberately answered separately. MEASUREMENT wants
+ * the table cleared between repeats, and that is th_clear_history(), an
+ * explicit call for benchmark harnesses that changes no search behaviour at
+ * all. SEARCH STRENGTH is the open question - carry-over across successive
+ * iterative-deepening depths may well be worth keeping - so the toggle below
+ * stays OFF until someone measures that, which is a different experiment from
+ * repeats at one depth. */
+#define CLEAR_HISTORY_AT_ROOT 0
+
+void th_clear_history(void) { memset(history, 0, sizeof history); }
+
 /* Returns 0 on success, -1 if the table could not be allocated.
  * NOTE: on an overcommitting OS (macOS, default Linux) calloc SUCCEEDS for a
  * request far larger than RAM and the process then balloons as the search
@@ -638,6 +657,9 @@ static void *helper_main(void *v) {
 static int root_search(THPos *p, int depth, int alpha, int beta, int workers,
                        uint16_t *bestmove, int *snd) {
     memset(killers, 0, sizeof killers);
+#if CLEAR_HISTORY_AT_ROOT
+    memset(history, 0, sizeof history);
+#endif
     g_abort = 0;
     pthread_t th[63];
     HelperArg args[63];

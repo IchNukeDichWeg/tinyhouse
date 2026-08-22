@@ -59,6 +59,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | `080916f` |
 | 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | `d298404` |
 | 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | `713e188` |
+| 29 | TH-19 | 3 | **CONFIRMED** | in-process repeats 757,431/839,298/845,107/1,345,672/795,066 -> 757,431 x5 with th_clear_history; bench_workers prints 757,431 not '1M' | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -696,3 +697,37 @@ the repo's Python, **8 are full, 11 are under-full** and 14 are deliberately
 malformed rejection cases. Enforcing `n != 2` would reject most of the rules
 suite, so softening the doc was the right direction and tightening the code
 would have been wrong.
+
+### TH-19 · `history` was never reset, so in-process repeats were not samples
+
+Reproduced with causation, five repeats of an identical depth-13 hunt, fresh
+`th_tt_init(22)` before every one:
+
+| | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| one process | 757,431 | 839,298 | 845,107 | **1,345,672** | 795,066 |
+| separate processes | 757,431 | 757,431 | 757,431 | 757,431 | 757,431 |
+
+A **+78%** worst case, worse than the +11.5% the backlog measured, and the
+backlog's correction stands: the repeats get *slower*, not faster, and they do
+not converge back.
+
+**Two questions, deliberately answered separately.** Measurement wants the
+table cleared between repeats: that is `th_clear_history()`, an explicit call
+for harnesses that changes no search behaviour whatsoever. Search strength is a
+different and still-open question -- carry-over across successive
+iterative-deepening depths may well be worth keeping -- so
+`CLEAR_HISTORY_AT_ROOT` exists and stays **0** until someone measures that
+experiment, which is not this one.
+
+**Instrument demonstrated against a known case, as the tier requires.** With
+`th_clear_history()` between repeats the in-process five become
+757,431 five times, identical to the separate-process baseline. And
+`scripts/bench_workers.py --depth 13 --workers 1,2` now prints
+`median nodes 757,431` -- matching the cold-process number exactly, where
+before the fix its `{n/1e6:8.0f}M` format printed `1M` for both arms.
+
+The damage was **between** arms, not within them: the script loops worker
+counts in the outer position, so the first count was the only arm ever holding
+a cold-history sample, and helper threads are always cold. The bias sat in
+precisely the comparison the script exists to make.

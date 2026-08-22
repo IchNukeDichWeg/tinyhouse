@@ -68,6 +68,7 @@ void th_seed(uint64_t s);
 int th_tt_save(const char *fname);
 int th_tt_load(const char *fname);
 uint64_t th_nodes(void);
+void th_clear_history(void);
 int th_search(THPos *p, int depth, uint16_t *bestmove);
 int th_solve(THPos *p, int depth, uint16_t *bestmove, int *snd);
 int th_solve_mt(THPos *p, int depth, int workers, uint16_t *bestmove, int *snd);
