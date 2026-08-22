@@ -82,6 +82,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 49 | TH-12 | 4 | **CONFIRMED** | +10.16% perft(7), +39.56% drop-heavy perft, +2.53% solve d14, +2.95% hunt d16 vs controls under 0.4%; node-identical | see below |
 | 50 | TH-11 | 4 | **CONFIRMED** | perft +28.46% start, +110.83% drop-heavy; inside search -0.78%/-0.68% so shipped OFF there; perft equivalence checked on 8 positions incl. 3 promoted-mao | see below |
 | 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | see below |
+| 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1311,3 +1312,34 @@ nodes-to-depth there.
 
 **The regression harness earned its keep here.** The node identity claim was
 mine, it was wrong, and the harness said so before the change could ship.
+
+### TH-15 · staged movegen, TT move first — CLOSED PRE-MEASUREMENT
+
+Not implemented, because a probe build measured the ceiling first and it is
+below the instrument's noise floor. Counters added to `search()`, run on
+hunt d16 and solve d14 from the start position:
+
+| | hunt d16 | solve d14 |
+|---|---|---|
+| interior nodes (generated a move list) | 4,959,734 | 5,646,912 |
+| ...that had a TT move at all | **53,429 (1.1%)** | 55,171 (1.0%) |
+| ...where the first searched move cut off | 4,313,893 (87.0%) | 4,907,267 (86.9%) |
+| ...and that first move *was* the TT move | **32,218 (0.6%)** | 33,141 (0.6%) |
+| moves generated | 91,369,473 (18.4/node) | 103,913,845 (18.4/node) |
+
+The node-identical subset can only skip generation where a TT move exists and
+cuts off first: **0.6% of interior nodes**. Even saving 100% of the work there
+lands under the ~1% noise floor measured in tier 3, and it would be bought with
+a `is_pseudo_legal` validator for TT moves -- which is a new wrong-PROVEN vector
+if it is ever wrong, since a colliding entry would otherwise hand `make()` an
+illegal move.
+
+Why so few TT moves: unproven depth-1 stores are skipped deliberately (they are
+~74% of write traffic) and the hit rate never exceeds ~5.3%.
+
+**Two numbers worth keeping from the probe**, because they price other work:
+**87% of interior nodes cut off on their first searched move** -- the ordering
+is already doing its job, which is exactly why a TT move adds so little -- and
+**18.4 moves are generated per node** to use one. That is the case for *lazy*
+generation, which is the item's non-node-identical half, and it is a tier 5
+question rather than a tier 4 one.

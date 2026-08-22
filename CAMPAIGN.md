@@ -109,7 +109,7 @@ line per item.
 | TH-10 | incremental Zobrist key | **CONFIRMED** |
 | TH-12 | hoist `king_sq` out of the legality loop | **CONFIRMED** |
 | TH-11 | fast legality (perft/`th_moves` half only) | **CONFIRMED** |
-| TH-15 | staged movegen: TT move before the full list | PENDING |
+| TH-15 | staged movegen: TT move before the full list | **CLOSED PRE-MEASUREMENT** |
 | TH-14 | bitboard movegen and `attacked()` | PENDING |
 
 ## Tier 5 — efficiency (nodes-to-depth), one at a time
