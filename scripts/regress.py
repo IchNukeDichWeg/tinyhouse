@@ -28,6 +28,13 @@ Depth choice is load-bearing and 10/12 is not arbitrary. At 6/8 a
 path-dependent-store mutation shows up as a ONE-node difference, which is luck;
 at 10/12 the same mutation is a percent-scale signal.
 
+NOT A PERFORMANCE PROXY. This is a regression DETECTOR at a fixed shallow depth
+pair, and it cannot stand in for the depth the product runs at. Measured: the
+TH-17 move-ordering bonus made this suite 11.21% cheaper while making the
+depth-18 start-position hunt 19.33% more expensive, and the depth-18 Black hunt
+70% more expensive. Judge an ordering or pruning change on the deep hunts, not
+on this.
+
   scripts/regress.py                 compare against the committed baseline
   scripts/regress.py --update        rewrite the baseline (say why in the commit)
   scripts/regress.py --lib PATH      run a scratch build instead

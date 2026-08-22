@@ -86,6 +86,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | `b4526f3` |
 | 54 | TH-16 (class B) | 5 | **KEPT-ON-NULL** | nodes +3.04% on the frozen suite (rows -5.63% to +7.28%, tie-break noise); time +8.15/+22.85/+7.91% on three hunts, -3.09% on mao-check perft; 74,702 positions move-set-identical to the Python engine | see below |
 | 55 | TH-13 | 5 | **CONFIRMED** | 4 of 200 root flags upgraded, 0 value changes, nodes exactly unchanged at depth 8 and -0.01% at most on the deeper suite | see below |
+| 56 | TH-17 | 5 | **REJECTED** | regression suite -11.21% at weight 512, but the deep hunts go +13.12/+15.17/+19.33% at d14/16/18 and +70.02% on the Black d18 hunt | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1504,3 +1505,42 @@ measures 4 in 200 and agrees with the characterisation. It is a one-line commit
 for flag tightness, not a performance change, and the six rows that move do so
 downward by a hundredth of a percent -- tighter flags let a few more cutoffs
 fire. Baseline updated in the same commit.
+
+### TH-17 · enemy-king-proximity bonus for quiet drops — REJECTED
+
+Filed PLAUSIBLE and UNMEASURED. Built, swept over five weights, and rejected on
+the workload it would actually run on.
+
+**The weight sweep on the regression suite looked like a clear win:**
+
+| weight | regression-suite nodes | vs 0 |
+|---|---|---|
+| 0 | 6,673,441 | — |
+| 8 | 6,131,067 | -8.13% |
+| 32 | 6,112,573 | -8.40% |
+| 128 | 6,039,086 | -9.51% |
+| **512** | **5,925,106** | **-11.21%** |
+| 2048 | 5,970,798 | -10.53% |
+
+**On the deep hunts it is the opposite sign, and it gets worse with depth:**
+
+| workload | w=0 | w=512 | delta |
+|---|---|---|---|
+| hunt d14, White, start | 1,238,385 | 1,400,805 | **+13.12%** |
+| hunt d16, White, start | 9,697,568 | 11,168,770 | **+15.17%** |
+| hunt d18, White, start | 86,755,179 | 103,521,808 | **+19.33%** |
+| hunt d16, Black, start | 1,784,342 | 1,756,471 | -1.56% |
+| hunt d18, Black, start | 9,135,325 | 15,531,425 | **+70.02%** |
+| solve d14, start | 1,472,142 | 1,539,404 | +4.57% |
+| hunt d12, drop-heavy | 85,883 | 86,118 | +0.27% |
+
+The deep start-position hunt is the workload that produced the published bounds
+and the one `solve_hunt.py` runs overnight. It regresses **13%, 15%, 19%** at
+depths 14, 16 and 18, monotonically worse, and the Black hunt at depth 18 is
+**+70%**. Rejected.
+
+**A methodological result worth more than the item.** The regression harness
+runs at depths 10 and 12, and it reported an 11% *improvement* for a change that
+costs 19% at depth 18. It is a **regression detector, not a performance proxy**,
+and its own header now has to say so -- a fixed shallow depth pair cannot stand
+in for the depth the product actually runs at.
