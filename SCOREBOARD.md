@@ -70,6 +70,8 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 37 | TH-31 | 3 | **CONFIRMED** | contract pinned: counter unchanged across th_tt_init/th_seed and across perft(5)=16,021; no reset added | see below |
 | 38 | TH-34 | 3 | **CONFIRMED** | win branch snd=1 at d9/d11, negative branch snd=0 at d8/10/12/14 (assertion gated accordingly) | see below |
 | 39 | TH-35 | 3 | **CONFIRMED** | d1c2 now reports -29990 with snd 2 (SND_UB); all five quiet moves snd 0 | see below |
+| 40 | TH-24 | 3 | **CONFIRMED** | walk now starts from all 5 oracle roots (was 1); +0.2s | see below |
+| 41 | TH-23 | 3 | **CONFIRMED** | 94,624 comparisons, 0 mismatches; catches 3 of 3 planted geometry bugs | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -948,3 +950,33 @@ The payoff correction is confirmed too: **all five quiet root moves carry snd 0*
 at depth 10. Proven draws are not reachable at GUI depths, so what this
 actually carries is mate-row soundness -- which is what the GUI now shows, via
 `fmtVal(mv.value, mv.snd)` instead of a hardcoded 0.
+
+### TH-24 · the Python/C parity walk started only from the start position
+
+Random play from the start reaches promotion and full hands vanishingly rarely,
+which is exactly where the two engines are most likely to diverge. The walk is
+parametrised over the five `PERFT_ORACLE` roots now, which between them begin
+with eight pieces in hand, a promotion one push away, and a mao check with a
+single blocking drop. Cost: 0.2s.
+
+### TH-23 · `attacked()` against an independent geometric oracle
+
+Confirmed as **missing coverage, not a suspected defect** -- and nothing is
+hiding in it. An oracle written from `RULES.md` prose and deliberately derived
+in the opposite direction (the engine reads reverse tables to ask "who attacks
+this square"; the oracle walks pieces forward and asks "where does this piece
+attack") agrees over **94,624 comparisons, 0 mismatches**.
+
+**Sensitive, checked rather than assumed.** Three planted geometry bugs, each
+in `tinyhouse.attacked()`:
+
+| planted bug | caught |
+|---|---|
+| king no longer attacks orthogonally | yes |
+| only the first mao origin considered | yes |
+| pawn attack direction flipped | yes |
+
+**Scope note, carried from the backlog and still true**: this covers the ATTACK
+direction only. `ORTH`/`DIAG`/`PCAPS` are also consumed by `pseudo_moves`
+alongside `KINGN` and `MAO_MOVES`, and that direction is still verified by
+nothing but perft.

@@ -93,8 +93,8 @@ line per item.
 | TH-34 | expose `snd` from `th_mate_hunt_mt` | **CONFIRMED** |
 | TH-35 | expose `snd` from `th_root_moves` | **CONFIRMED** |
 | TH-30 | test the Zobrist reseed contract | **CONFIRMED** |
-| TH-24 | extend the Python/C parity walk beyond the start position | PENDING |
-| TH-23 | pin `attacked()` against an independent geometric oracle | PENDING |
+| TH-24 | extend the Python/C parity walk beyond the start position | **CONFIRMED** |
+| TH-23 | pin `attacked()` against an independent geometric oracle | **CONFIRMED** |
 | TH-29 | pin a draw-by-repetition proof | PENDING |
 | TH-26 | test the `solve_hunt` resume/checkpoint round trip | PENDING |
 | TH-33 | cross-check `state_count.py`, delete its dead stub | PENDING |
