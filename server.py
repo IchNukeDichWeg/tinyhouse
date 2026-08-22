@@ -77,6 +77,21 @@ def white_view(v: int, stm: int) -> int:
     return v if stm == T.WHITE else -v
 
 
+def white_view_snd(snd: int, stm: int) -> int:
+    """TH-40: put the soundness flags in the same frame as the value.
+
+    SND_LB and SND_UB are duals of the value they describe, so negating the
+    value into White's frame has to swap them. Serving the raw mover-frame bits
+    beside a white-view value made the payload mix frames: a colour-mirrored
+    pair returned values -29991 and +29991 -- correctly negated -- and BOTH
+    reported snd=1, which is a lower bound for White and an upper bound for
+    Black. A badge reading the raw flag prints "lower bound" for an upper one.
+    """
+    if stm == T.WHITE:
+        return snd
+    return ((snd & 1) << 1) | ((snd & 2) >> 1)
+
+
 def analyze(tfen: str, depth: int) -> dict:
     with DB_LOCK:
         row = db.execute("SELECT json FROM analysis WHERE tfen=? AND depth=? AND version=?",
@@ -107,7 +122,8 @@ def analyze(tfen: str, depth: int) -> dict:
         ({"move": T.move_str(mvs[i]), "value": white_view(vals[i], pos.stm)} for i in range(n)),
         key=lambda x: -x["value"] if pos.stm == T.WHITE else x["value"])
     proven = abs(v) > T_MATE_BOUND or snd[0] == 3
-    out = {"tfen": tfen, "depth": depth, "value": white_view(v, pos.stm), "snd": snd[0],
+    out = {"tfen": tfen, "depth": depth, "value": white_view(v, pos.stm),
+           "snd": white_view_snd(snd[0], pos.stm),
            "best": T.move_str(bm[0]) if bm[0] else None, "moves": moves,
            "proven": proven, "nodes": nodes, "time": round(dt, 3), "cached": False}
     if proven or not CACHE_ONLY_PROVEN:

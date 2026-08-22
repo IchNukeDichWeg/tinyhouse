@@ -44,6 +44,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 11 | THB-09 | 1 | **CONFIRMED** | unproven rows no longer stored; build_book 8 1 keeps 0 of 7 visited (nothing that shallow is proven) | see below |
 | 12 | TH-41 | 1 | **CONFIRMED** | labelling only; no engine or node-count effect | see below |
 | 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | see below |
+| 14 | TH-40 | 1 | **CONFIRMED** | mirrored pair now reports snd 2 vs 1 (was 1 vs 1); cache namespace moves automatically via TH-42 | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -335,3 +336,28 @@ that the derivation depends on nothing incidental about the path.
 **Named cost**: any edit to either file invalidates the whole cache. It is
 gitignored and rebuildable, and over-invalidating is the safe direction. This
 also removes the manual bump TH-40 would otherwise have needed.
+
+### TH-40 · `/api/analyze` mixed frames
+
+Reproduced with a colour-mirrored pair at depth 10:
+
+| position | side | mover value | served value | served snd |
+|---|---|---|---|---|
+| `fuwk/3p/P1F1/KWU1[-] b` | Black | +29991 | **-29991** | 1 |
+| its sigma mirror | White | +29991 | **+29991** | 1 |
+
+The values negate correctly. The flags do not move with them: `snd=1` is
+`SND_LB`, a *lower* bound on +29991 for White and an *upper* bound on -29991
+for Black, served under the same name. The reported sign correction is right
+and load-bearing -- `SND_LB`/`SND_UB` are duals of the value they describe, so
+the bits swap when the value is negated.
+
+**Latent for today's GUI, and the acceptance test that would ship the bug is
+exactly the obvious one.** `index.html:120` tests only `snd === 3`, which is
+invariant under the swap, and `fmtVal` short-circuits on `|v| > 29000` before
+consulting `snd` at all. A test asserting "badge proven only when snd == 3"
+passes on both the broken and the fixed code. The test written here compares
+the mirrored pair instead, and asserts the two differ.
+
+**Cache namespace**: the item requires a bump in the same commit. TH-42 landed
+first, so it happens by construction -- `ENGINE_VERSION` hashes `server.py`.

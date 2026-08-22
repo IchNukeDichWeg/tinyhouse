@@ -193,3 +193,39 @@ def test_cache_rows_are_namespaced_by_the_engine_build(srv):
         server.db.commit()
     code, a = srv("/api/analyze", tfen=MATE9, depth=10)
     assert a["cached"] is False, "a row from another engine version was served"
+
+
+def sigma(tfen):
+    """Colour mirror: flip ranks, swap colours, swap hands, flip side to move.
+
+    Maps a legal position to a legal one whose value in White's frame is the
+    negation of the original's, with the mover in an identical situation.
+    """
+    import tinyhouse as T
+
+    p = T.Position.from_tfen(tfen)
+    q = T.Position()
+    for s in range(16):
+        pc = p.board[s]
+        if pc:
+            r, f = s >> 2, s & 3
+            q.board[(3 - r) * 4 + f] = T.piece(1 - T.pcolor(pc), T.ptype(pc), T.ppromoted(pc))
+    q.hands = [list(p.hands[1]), list(p.hands[0])]
+    q.stm = 1 - p.stm
+    return q.tfen()
+
+
+def test_value_and_snd_are_in_the_same_frame(srv):
+    """TH-40: `value` was white-view and `snd` was mover-view.
+
+    SND_LB and SND_UB are duals of the value they describe, so negating the
+    value has to swap them. The colour-mirrored pair below returned -29991 and
+    +29991, correctly negated, and both reported snd=1 -- a lower bound for
+    White and an upper bound for Black, served under the same name.
+    """
+    code, a = srv("/api/analyze", tfen=MATE9, depth=10)
+    code, b = srv("/api/analyze", tfen=sigma(MATE9), depth=10)
+    assert a["value"] == -b["value"] != 0
+    swap = ((b["snd"] & 1) << 1) | ((b["snd"] & 2) >> 1)
+    assert a["snd"] == swap, (a["snd"], b["snd"])
+    assert a["snd"] != b["snd"], "the flags did not move with the value"
