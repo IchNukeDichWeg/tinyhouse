@@ -54,7 +54,9 @@ loses by force: `1...Uxc2 2.Wb2 F@a3 3.Wxc2 dxc2 4.U@b3 Kd3 5.Uxd2 W@b1#` (mate 
 These bounds are proof-grade, not heuristic: the search returns an *unsound* 0 at the
 horizon and sound values only at terminals and repetitions, so a mate score it reports
 is a proof, and a null-window hunt returning 0 proves no win exists within that budget.
-See the solver comment block in `tinyhouse.c`.
+See the solver comment block in `tinyhouse.c`, which also states what rep-safety
+does *not* cover: it keeps path-dependent values out of the table, while the reuse
+side is unguarded.
 
 **The two claims are not equally strong, and the difference is worth stating.** A
 reported mate is a proof of a forced win *and*, since the ply-budget guard, of the

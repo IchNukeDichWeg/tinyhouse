@@ -207,3 +207,28 @@ def test_a_failed_tt_save_leaves_the_previous_dump_intact(tt, tmp_path):
 
     assert f.read_bytes() == good
     assert tt.lib.th_tt_load(str(f).encode()) == 0
+
+
+# The recorded mate-in-9 line from solve_status.json, in engine notation.
+MATE9_PV = ["b4c2", "b1b2", "F@a3", "b2c2", "d3c2", "U@b3", "d4d3", "b3d2", "W@b1"]
+
+
+def test_the_recorded_proof_line_is_legal_and_repetition_free():
+    """TH-03's cheap mitigation, run rather than described.
+
+    Rep-safety keeps path-dependent values out of the table; the REUSE side is
+    unguarded, and the residual lands on the positive side -- a possible
+    over-claimed win. Replaying each published PV from the root and confirming
+    it never repeats a position closes that for the proofs actually published,
+    which is cheaper than more search.
+    """
+    pos = T.Position.from_tfen("fuwk/3p/P1F1/KWU1[-] b")
+    seen = {pos.key()}
+    for i, ms in enumerate(MATE9_PV):
+        legal = {T.move_str(m): m for m in pos.legal_moves()}
+        assert ms in legal, f"ply {i + 1}: {ms} illegal in {pos.tfen()}"
+        pos.make(legal[ms])
+        assert pos.key() not in seen, f"ply {i + 1} repeats a position: {pos.tfen()}"
+        seen.add(pos.key())
+    assert pos.result() == -1        # White, to move, is checkmated
+    assert len(MATE9_PV) == 9

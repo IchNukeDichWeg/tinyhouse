@@ -55,6 +55,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 22 | TH-01 | 2 | **CONFIRMED** | docs only; the claim is true after THB-01 but its stated reason never was | see below |
 | 23 | TH-02 | 2 | **CONFIRMED** | docs only; 4 sites, no code path touched (perft(7) 1,355,253, suite 80) | see below |
 | 24 | TH-05 | 2 | **CONFIRMED** | default workers 2 -> 1; node counts now reproducible run to run (467/3,420/23,635 three for three vs 786/807/792 at 2 workers) | see below |
+| 25 | TH-03 | 2 | **CONFIRMED** | PV replay: 9/9 plies legal, 0 repetitions, terminal result -1; perft(7) 1,355,253 unchanged | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -608,3 +609,25 @@ from depth 6 in steps of 2) that was missing. The *claims* never depended on
 any of it -- a null-window hunt returning 0 proves the negative whatever the
 thread count -- only the node counts do, and they are now labelled as not
 exactly reproducible.
+
+### TH-03 · rep-safety "keeps the graph-history interaction problem out"
+
+Confirmed overclaim, and re-read against the current code: the probe applies no
+path condition and `TTView` records nothing about which path an entry came
+from, so rep-safety governs the **store** side only. `README.md` pointed
+readers at this block as the authority, so both were edited.
+
+Both mitigations the reports did not credit are checked and stated: the
+path-repetition scan runs **before** the probe, so a node repeating a
+current-path ancestor can never take a stored decisive value; and the residual
+is one-directional, landing on a possible over-claimed win and never on a
+fabricated "no win". The threefold caveat is recorded too -- under real
+threefold rules a winning strategy may pass through a once-repeated position,
+which this engine scores as a draw, so its negatives are *conservative* with
+respect to threefold rather than identical to it.
+
+**The item's cheap mitigation was run, not just described.** The recorded
+mate-in-9 PV replays move by move from `fuwk/3p/P1F1/KWU1[-] b`: all nine plies
+legal, **no position repeats**, and it ends with White to move and checkmated
+(`result == -1`). It is now a test, so a change that made the published line
+illegal or repetition-dependent would fail rather than be argued about.

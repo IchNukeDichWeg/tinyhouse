@@ -260,8 +260,22 @@ uint64_t th_perft(THPos *p, int depth) {
  * draw (equivalent to threefold for game values: a winning strategy never
  * needs to repeat, and the defender can force the claim by looping).
  * Results whose value depended on a repetition hitting an ANCESTOR of the
- * node are path-dependent and are never stored in the TT (rep-safety; this
- * is what keeps the graph-history interaction problem out).
+ * node are path-dependent and are never stored in the TT (rep-safety). That
+ * keeps path-dependent values OUT OF THE TABLE; it does not close graph-history
+ * interaction, because the REUSE side is unguarded - the probe below applies no
+ * path condition and a TTView records nothing about which path an entry came
+ * from. Two things bound the residual. The path-repetition scan runs BEFORE the
+ * probe, so a node that itself repeats a current-path ancestor can never take a
+ * stored decisive value, which is the most direct GHI case. And what is left is
+ * one-directional: it lands on the positive side, a possible over-claimed win,
+ * never a fabricated "no win". The published proofs are additionally checked by
+ * replaying each PV from the root and confirming it is repetition-free
+ * (test_solver.py), which is cheaper than more search.
+ *
+ * The immunity is also relative to this engine's own model: under real
+ * threefold rules a winning strategy may legally pass through a once-repeated
+ * position, and this scores that as a draw. Negative results are therefore
+ * CONSERVATIVE with respect to threefold, not identical to it.
  *
  * Multithreading: lazy SMP. Helper threads search the same root (half of
  * them one ply deeper) sharing the TT; per-thread state (path, killers,
