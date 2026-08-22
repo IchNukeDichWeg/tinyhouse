@@ -63,7 +63,7 @@ line per item.
 | TH-42 | `ENGINE_VERSION` is hand-bumped | PENDING |
 | TH-44 | error responses leak absolute filesystem paths | PENDING |
 | TH-43 | `th_solve` at `depth <= 0` returns no best move | PENDING |
-| TH-41 | cache hits replay the first computation's `nodes`/`time`/`depth` | PENDING |
+| TH-41 | cache hits replay the first computation's `nodes`/`time`/`depth` | **CONFIRMED** |
 
 ## Tier 2 — doc overclaims
 

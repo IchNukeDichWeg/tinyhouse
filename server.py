@@ -74,6 +74,11 @@ def analyze(tfen: str, depth: int) -> dict:
                          (tfen, depth, ENGINE_VERSION)).fetchone()
     if row:
         out = json.loads(row[0])
+        # TH-41: nodes/time describe the computation that PRODUCED the row, not
+        # this request. A proven row can carry a tiny node count (the search
+        # that found it had a warm table), so rendering it as this request's
+        # cost would read as "15 nodes proved a mate in 9". `cached` is the
+        # flag that says so, and index.html drops the numbers when it is set.
         out["cached"] = True
         return out
     pos = T.Position.from_tfen(tfen)

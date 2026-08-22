@@ -269,7 +269,11 @@ async function analyze() {
     const f = fmtVal(a.value, a.snd);
     $("evalbig").textContent = f.t;
     $("evalsub").textContent = f.s + (a.best ? " — best: " + a.best : "");
-    $("stats").textContent = `depth ${a.depth} · ${a.nodes.toLocaleString()} nodes · ${a.time}s` + (a.cached ? " · cached" : "");
+    // A cached row's nodes/time belong to the computation that produced it,
+    // not to this request, so they are not shown as if they were.
+    $("stats").textContent = a.cached
+      ? `depth ${a.depth} · from cache`
+      : `depth ${a.depth} · ${a.nodes.toLocaleString()} nodes · ${a.time}s`;
     const tbl = $("moves");
     for (const mv of a.moves) {
       const tr = document.createElement("tr");

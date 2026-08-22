@@ -144,3 +144,24 @@ def test_build_book_runs(tmp_path, monkeypatch):
                        cwd=tmp_path, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
     assert "positions visited at depth 6" in r.stdout
+
+
+def test_a_cache_hit_is_marked_and_its_provenance_is_not_this_request(srv):
+    """TH-41: a hit replays the producing computation's nodes and time.
+
+    Load-bearing only in combination with THB-09, which is fixed, so what is
+    left is the label. A proven row can carry a tiny node count -- the search
+    that found it had a warm table -- and showing that as this request's cost
+    reads as "15 nodes proved a mate in 9". The response marks it; index.html
+    prints "from cache" instead of the numbers.
+    """
+    code, first = srv("/api/analyze", tfen=MATE9, depth=10)
+    assert first["cached"] is False
+    code, hit = srv("/api/analyze", tfen=MATE9, depth=10)
+    assert hit["cached"] is True
+    assert hit["depth"] == first["depth"] == 10
+    assert hit["nodes"] == first["nodes"] and hit["time"] == first["time"]
+
+    page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
+    assert "from cache" in page
+    assert "nodes · ${a.time}s` + (a.cached" not in page

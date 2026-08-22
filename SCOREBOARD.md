@@ -42,6 +42,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 9 | THB-08 | 1 | **CONFIRMED** | failed save: silent exit-0 -> WARNING + intact previous dump; perft(7) 1,355,253 unchanged | see below |
 | 10 | THB-10 | 1 | **CONFIRMED** | depth 0 and -5 now clamp to 1; repo DB had 0 rows to clean (4 rows, depths 8/14) | see below |
 | 11 | THB-09 | 1 | **CONFIRMED** | unproven rows no longer stored; build_book 8 1 keeps 0 of 7 visited (nothing that shallow is proven) | see below |
+| 12 | TH-41 | 1 | **CONFIRMED** | labelling only; no engine or node-count effect | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -294,3 +295,20 @@ so a test need not touch the repo's, and has a smoke test.
 **One test rewritten in the same commit**, not disabled: the round trip
 asserted a cache hit on the start position at depth 8, which is unproven and
 correctly no longer cached. It now asserts the hit on a proven position.
+
+### TH-41 · cache hits replayed the producing computation's provenance
+
+Re-read after THB-09 landed, and the item is **smaller than filed**. The
+"depth is replayed too" half is now vacuous: rows are keyed on `(tfen, depth)`
+and stored under the depth they were computed at, so the stored `depth` always
+equals the requested one. What made it look otherwise was THB-09 -- a depth-6
+key holding a depth-14 answer -- and that is fixed.
+
+What survives is real but small: a proven row can carry a tiny node count,
+because the search that produced it had a warm table, and rendering that as the
+current request's cost reads as "15 nodes proved a mate in 9". The GUI now
+prints `depth N · from cache` instead of numbers that describe a different
+computation. The API keeps `nodes`/`time` for scripted consumers, next to the
+`cached` flag that says what they mean.
+
+Not a measurement item: no node count and no timing changes.
