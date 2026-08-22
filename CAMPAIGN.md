@@ -110,7 +110,7 @@ line per item.
 | TH-12 | hoist `king_sq` out of the legality loop | **CONFIRMED** |
 | TH-11 | fast legality (perft/`th_moves` half only) | **CONFIRMED** |
 | TH-15 | staged movegen: TT move before the full list | **CLOSED PRE-MEASUREMENT** |
-| TH-14 | bitboard movegen and `attacked()` | PENDING |
+| TH-14 | bitboard movegen and `attacked()` | **REJECTED** |
 
 ## Tier 5 — efficiency (nodes-to-depth), one at a time
 

@@ -83,6 +83,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 50 | TH-11 | 4 | **CONFIRMED** | perft +28.46% start, +110.83% drop-heavy; inside search -0.78%/-0.68% so shipped OFF there; perft equivalence checked on 8 positions incl. 3 promoted-mao | see below |
 | 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | see below |
 | 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | see below |
+| 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1343,3 +1344,47 @@ is already doing its job, which is exactly why a TT move adds so little -- and
 **18.4 moves are generated per node** to use one. That is the case for *lazy*
 generation, which is the item's non-node-identical half, and it is a tier 5
 question rather than a tier 4 one.
+
+### TH-14 · bitboard movegen and `attacked()` — REJECTED, on a measurement of the cheap form
+
+**Ceiling measured first.** A sampling profile of a real depth-18 hunt, self
+time:
+
+| function | self |
+|---|---|
+| `search` | 50.8% |
+| `pseudo_moves` | 24.5% |
+| `attacked` | 16.0% |
+| `key_after` | 6.6% |
+| `th_in_check` | 0.6% |
+
+The two functions the item targets are **40.5%** of the work, so a 1.5-2x
+rewrite of both would be worth roughly +16% to +25%. That is a real ceiling and
+it is why the item was not dismissed on effort.
+
+**Then the cheap form of the same hypothesis was built and measured, and it
+loses.** `attacked()` is the half whose result is provably unchanged -- it
+returns a boolean, so there is no emission order to preserve -- and the flat
+single-table version (one contiguous array of {origin, type-mask, blocker}
+instead of four 0xff-terminated walks with four different type tests) measures:
+
+| workload | control | flat table | verdict |
+|---|---|---|---|
+| solve d14, start | -0.39% | **-1.78%** | loss |
+| hunt d16, start | -0.05% | **-1.80%** | loss |
+| perft(7), start | +0.25% | **-8.52%** | loss |
+| perft(4), drop-heavy | +0.10% | +3.67% | win |
+
+Node-identical throughout, so this is purely representation. Three of four
+workloads regress, `perft(7)` badly. The four specialised loops beat one general
+one: each is small enough for the compiler to specialise, the common case
+(`ORTH`, a wazir or king) returns before the rest is touched, and the flat form
+pays a mask test and a wider entry for every candidate.
+
+**Verdict.** The cheap form of "replace the attack representation" is refuted on
+this machine, which raises rather than lowers the bar for the expensive form.
+True bitboards would need masks maintained through make/unmake -- which TH-10
+already showed leaks cost into perft and `th_moves` -- or threaded through the
+search, and the item's own verdict is PLAUSIBLE, UNMEASURED, high effort, and
+**not node-identical**. Rejected with the profile kept, so a future attempt
+starts from the ceiling rather than from a guess.
