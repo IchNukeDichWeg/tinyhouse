@@ -145,6 +145,10 @@ def test_drop_always_legal_when_not_in_check():
     "k3/K3/4/4[-] w",                # side not to move is in check
     "KK~2/4/4/3k[-] w",              # promoted king: invisible to both count guards
     "3k/2P~1/4/K3[-] b",             # promoted pawn: promotion is to F/U/W only
+    "P3/4/4/K2k[-] w",               # white pawn on its own promotion rank
+    "3k/4/4/K2p[-] b",               # black pawn on its own promotion rank
+    "3p/4/4/K2k[-] b",               # black pawn on rank 4, unreachable
+    "3k/4/4/P2K[-] w",               # white pawn on rank 1, unreachable
 ])
 def test_from_tfen_rejects_malformed(bad):
     with pytest.raises(ValueError):

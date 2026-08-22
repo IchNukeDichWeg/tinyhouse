@@ -48,7 +48,7 @@ line per item.
 | THB-07 | `.tt` dump carries no identity of the code that produced it | PENDING |
 | THB-05 | `to_c` is the real trust boundary and validates nothing | PENDING |
 | THB-02 | `from_tfen` accepts a promoted king | **CONFIRMED** |
-| THB-03 | `from_tfen` accepts a pawn on rank 1 or 4 | PENDING |
+| THB-03 | `from_tfen` accepts a pawn on rank 1 or 4 | **CONFIRMED** |
 | THB-04 | `make`/`unmake` write `hands[us][4]` on a king capture | PENDING |
 | THB-06 | `str_move('K@a1')` fabricates a king drop | PENDING |
 | THB-08 | `save_state()` discards `th_tt_save`'s return; save truncates on open | PENDING |

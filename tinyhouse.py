@@ -140,6 +140,15 @@ class Position:
                         raise ValueError(
                             f"TFEN marks a {TYPE_CHARS[t]} as promoted; only F, U and W "
                             f"can be: {tfen!r}")
+                    # No pawn can ever stand on rank 1 or rank 4. On its own
+                    # promotion rank it would be frozen (promotion is forced, so
+                    # pawn_moves is empty); the far rank is simply unreachable,
+                    # since pawns only move forward and the drop rule already
+                    # forbids both back ranks. Same predicate as pseudo_moves.
+                    if t == P and r in (0, 3):
+                        raise ValueError(
+                            f"TFEN puts a pawn on rank {r + 1}; pawns never stand "
+                            f"on rank 1 or 4: {tfen!r}")
                     pos.board[_sq(f, r)] = piece(color, t, promoted)
                     f += 1
                 else:

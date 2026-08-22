@@ -33,6 +33,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 |---|---|---|---|---|---|
 | 1 | THB-01 | 0 | **CONFIRMED** | fix costs nothing on the bounds path: start-position negative hunt d16 White 9,913,857 -> 9,616,663 nodes (-3.0%), Black 1,824,606 -> 1,791,866 (-1.8%); repro position d13 8,279,609 -> 8,988,304 (+8.6%) | `8b2e81c` |
 | 2 | THB-02 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
+| 3 | THB-03 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -90,3 +91,19 @@ correctly, and it is still not a legal piece.
 
 perft(7) unchanged at 1,355,253; the five `PERFT_ORACLE` round-trips are green,
 so no legal TFEN in the repo used `~` on a P or K.
+
+### THB-03 · `from_tfen` accepted a pawn on rank 1 or rank 4
+
+All four families reproduced red before the fix -- `P3/4/4/K2k[-] w`,
+`3k/4/4/K2p[-] b`, `3p/4/4/K2k[-] b`, `3k/4/4/P2K[-] w` -- each parsing and
+round-tripping unchanged. The parse loop checked characters, file overflow and
+file coverage; the post-loop block checked unit counts, king counts and
+side-not-to-move-in-check. Pawn *placement* was checked nowhere, and the only
+pawn-rank rule in the codebase lived in the drop predicate.
+
+The two families are illegal for different reasons, which is why the guard is
+stated as a rank rule and not as an "immobile piece" rule: on its own promotion
+rank the pawn is frozen (promotion is forced, so it generates no moves), while
+on the far rank it plays on normally and is merely unreachable.
+
+perft(7) unchanged at 1,355,253; all five `PERFT_ORACLE` round-trips green.
