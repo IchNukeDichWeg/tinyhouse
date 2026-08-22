@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 analysis.sqlite
 solve_state/
+.claude/scheduled_tasks.lock
