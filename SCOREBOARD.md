@@ -46,7 +46,8 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | see below |
 | 14 | TH-40 | 1 | **CONFIRMED** | mirrored pair now reports snd 2 vs 1 (was 1 vs 1); cache namespace moves automatically via TH-42 | see below |
 | 15 | THB-11 | 1 | **CONFIRMED** | contended trivial request: unbounded wait -> 503 after 20s; GUI depth cap 22 -> 16 on measured cost (d16 10.25s, d18 98.77s cold) | see below |
-| 19 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | see below |
+| 16 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | see below |
+| 17 | TH-43 | 1 | **CONFIRMED** | node-identical (9,616,663 hunt d16 and 1,319,149 solve d14 on both arms); time x0.993/x1.000, inside spread | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -409,3 +410,28 @@ error`, with the traceback printed locally where the operator can see it.
 
 Pinned by planting the exception rather than by creating a directory inside the
 repo, since the defect is generic and a test must not write to a repo path.
+
+### TH-43 · `/api/analyze?depth=1` returned no best move
+
+Reproduced: depth 1 gave `best=None` while listing six scored moves; depths 2
+and 3 gave `c1b3`.
+
+**The mechanism is not the one filed.** The item says the horizon branch
+returns before any store. At depth 1 the root is not a horizon node at all --
+it searches its children at depth 0 and computes a best move perfectly well.
+What fails is the *reporting*: `root_search` recovered the move by probing the
+TT, and unproven depth-1 stores are skipped deliberately (they are most of the
+write traffic and nearly worthless), so the probe found nothing. The searcher
+already knew the move and simply was not handing it back. It now does, with the
+probe left as the fallback for `depth <= 0` roots where no search ran.
+
+Reachable because THB-10 put the floor at 1; before that, depth 1 was one of
+several depths that misbehaved.
+
+**Node-identical, measured rather than asserted** (fresh process per repeat,
+interleaved, tt 2^22, first repeat discarded):
+
+| workload | pre | post | identical | time |
+|---|---|---|---|---|
+| hunt d16 White, start | 9,616,663 | 9,616,663 | yes | x0.993 (spread 2.1-3.9%) |
+| solve d14, start | 1,319,149 | 1,319,149 | yes | x1.000 (spread 0.2%) |

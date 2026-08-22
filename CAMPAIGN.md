@@ -62,7 +62,7 @@ line per item.
 | TH-40 | `/api/analyze` mixes frames: `value` white-view, `snd` mover-view | **CONFIRMED** |
 | TH-42 | `ENGINE_VERSION` is hand-bumped | **CONFIRMED** |
 | TH-44 | error responses leak absolute filesystem paths | **CONFIRMED** |
-| TH-43 | `th_solve` at `depth <= 0` returns no best move | PENDING |
+| TH-43 | `th_solve` at `depth <= 0` returns no best move | **CONFIRMED** |
 | TH-41 | cache hits replay the first computation's `nodes`/`time`/`depth` | **CONFIRMED** |
 
 ## Tier 2 — doc overclaims

@@ -445,7 +445,12 @@ int th_tt_load(const char *fname) {
     return ok ? 0 : -1;
 }
 
-typedef struct { int rep_min; uint8_t snd; } SInfo;
+/* `best` (TH-43) is the searching thread's own best move. root_search used to
+ * recover it by probing the TT, which returns nothing at depth 1: unproven
+ * depth-1 stores are skipped on purpose, so /api/analyze?depth=1 answered with
+ * best = null. The searcher already knows the move; it just was not handing it
+ * back. Reporting it does not touch a single node. */
+typedef struct { int rep_min; uint8_t snd; uint16_t best; } SInfo;
 
 /* cheap direct-check detection for ordering only (ignores discovered and
  * unblocking effects; ordering need not be exact) */
@@ -481,6 +486,7 @@ static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks
 static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) {
     si->rep_min = MAXPLY;
     si->snd = 0;
+    si->best = 0;
     if (g_abort) return 0;
     if (++tl_pending >= 4096) nodes_flush();
 
@@ -577,6 +583,7 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) 
     if (!cutoff && all_children_lb) snd |= SND_UB;
     si->snd = snd;
     si->rep_min = my_rep;
+    si->best = bestm;
 
     if (tt && my_rep >= ply && !g_abort) {
         int flag = best <= alpha0 ? TT_UPPER : cutoff ? TT_LOWER : TT_EXACT;
@@ -637,7 +644,9 @@ static int root_search(THPos *p, int depth, int alpha, int beta, int workers,
     if (snd) *snd = si.snd;
     if (bestmove) {
         TTView tv;
-        *bestmove = tt_probe(th_key(p), &tv) ? tv.move : 0;
+        /* the searcher's own move first; the table is the fallback for the
+         * depth <= 0 roots, where no search ran and there is nothing to give */
+        *bestmove = si.best ? si.best : (tt_probe(th_key(p), &tv) ? tv.move : 0);
     }
     return v;
 }

@@ -297,3 +297,18 @@ def test_an_internal_error_does_not_echo_a_filesystem_path(srv, monkeypatch, cap
 def test_a_missing_query_parameter_is_a_400(srv):
     code, err = srv("/api/position")
     assert code == 400 and "tfen" in err["error"]
+
+
+def test_analyze_reports_a_best_move_at_every_reachable_depth(srv):
+    """TH-43: root_search recovered the best move by probing the TT.
+
+    Unproven depth-1 stores are skipped on purpose -- they are most of the
+    write traffic and nearly worthless -- so at depth 1 the probe found nothing
+    and the response carried best = null while listing six scored moves. The
+    searching thread already knew the move; it just was not handing it back.
+    Reachable since THB-10 put the floor at 1.
+    """
+    for d in (1, 2, 3):
+        code, a = srv("/api/analyze", tfen=START, depth=d)
+        assert code == 200 and a["best"] is not None, (d, a)
+        assert a["best"] in srv("/api/position", tfen=START)[1]["moves"]
