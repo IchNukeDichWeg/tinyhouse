@@ -10,15 +10,21 @@ the three things that make that measurable here:
   removes the question entirely.
 - **Interleaved A/B/A/B, never blocked AAA/BBB.** This machine throttles; a
   blocked run aliases thermal drift straight into the result.
-- **First repeat discarded**, medians and spread reported. A delta smaller than
-  the spread is NULL, not a win.
+- **First repeat discarded**, medians and spread reported.
+- **A same-build CONTROL ARM.** Pass the same dylib twice under two names and
+  the delta between them is the measured noise floor, which is what a result
+  should be judged against. Judging against the per-run spread is far too
+  conservative for a median: with other work on the machine individual runs
+  scatter 5-10% while two byte-identical builds land within 0.5%.
 
 Node identity is reported separately from time, because a change claiming to be
 node-identical has that identity as its acceptance test, and a node count is
 load-independent where a time is not.
 
-  scripts/bench_ab.py --lib base=/tmp/libbase.dylib --lib new=../libtinyhouse.dylib \
-      --work "hunt|fuwk/3p/P3/KWUF[-] w|16|0" --repeats 4
+  scripts/bench_ab.py --repeats 9 \
+      --lib baseA=/tmp/libbase.dylib --lib baseB=/tmp/libbase.dylib \
+      --lib new=../libtinyhouse.dylib \
+      --work "hunt|fuwk/3p/P3/KWUF[-] w|16|0"
 
 Build an arm with:  cc -O2 -pthread -shared -DTH_BUILD_ID=1 -o /tmp/libX.dylib x.c
 """
@@ -133,9 +139,26 @@ if __name__ == "__main__":
                   f"cpu {med:7.3f}s  spread {spread:4.1f}%{rel}")
         allnodes = set().union(*({n for _, n, _ in seen[k]} for k, _ in arms))
         print(f"  node identity across arms: {'YES' if len(allnodes) == 1 else 'NO ' + str(sorted(allnodes))}")
-        if len(arms) == 2 and len(samples[arms[0][0]]) >= 2:
-            a_med, b_med = (statistics.median(samples[n]) for n, _ in arms)
-            worst = max((max(s) - min(s)) / statistics.median(s) * 100 for s in samples.values())
-            delta = (a_med / b_med - 1) * 100
-            print(f"  delta {delta:+.1f}%  worst spread {worst:.1f}%  -> "
-                  f"{'NULL (delta is inside the spread)' if abs(delta) <= worst else 'signal'}")
+
+        # Judging a delta against the per-run spread is far too conservative for
+        # a median over many samples: with other work on the machine individual
+        # runs scatter 5-10% while the MEDIANS of two byte-identical builds land
+        # within 1%. So pass the same dylib twice under two names and this
+        # reports that pair's delta as the measured noise floor, which is the
+        # honest thing to judge against. Without a control arm it falls back to
+        # the spread, and says which rule it used.
+        med = {n: statistics.median(samples[n]) for n, _ in arms}
+        floor, how = None, "worst per-run spread, no control arm"
+        for i, (na, pa) in enumerate(arms):
+            for nb, pb in arms[i + 1:]:
+                if Path(pa).resolve() == Path(pb).resolve():
+                    floor = abs(med[na] / med[nb] - 1) * 100
+                    how = f"control arms {na}/{nb}, same build"
+        if floor is None:
+            floor = max((max(s) - min(s)) / statistics.median(s) * 100 for s in samples.values())
+        base_name = arms[0][0]
+        for name, _ in arms[1:]:
+            delta = (med[base_name] / med[name] - 1) * 100
+            verdict = "NULL" if abs(delta) <= max(floor, 0.2) else "signal"
+            print(f"  {base_name} -> {name}: {delta:+.2f}%   noise floor {floor:.2f}% "
+                  f"({how})   -> {verdict}")
