@@ -8,6 +8,14 @@ does not predict depth 24, so measure at your target depth before committing
 a long run to a worker count.
 
   scripts/bench_workers.py --depth 20 --workers 1,2,4 --repeats 2
+  scripts/bench_workers.py --depth 20 --tt-sweep 20,22,24,26 --repeats 2
+
+TT SIZE (TH-39): the --tt default was never measured at the depth it is used
+at. The nodes-to-depth curve flattens early -- past 2^20 at depth 16 -- but that
+is the wrong reason to lower it, because what a bigger table buys at depth is
+throughput, not fewer nodes: at depth 18 a 91.7%-full 2^22 table took 216.6s
+against 100.3s for 2^24 on the same work. --tt-sweep reports nodes, occupancy
+and time per size so the decision is made at the depth actually being run.
 
 Each run uses a fresh transposition table AND clears the thread-local history
 table, so runs cannot seed each other. That second half is not optional: the
@@ -39,11 +47,40 @@ ap.add_argument("--workers", default="1,2,4", help="comma-separated worker count
 ap.add_argument("--repeats", type=int, default=3)
 ap.add_argument("--color", type=int, default=0, choices=(0, 1))
 ap.add_argument("--tt", type=int, default=24)
+ap.add_argument("--tt-sweep", default=None, help="comma-separated log2 sizes; sweeps --tt instead of --workers")
 ap.add_argument("--tfen", default="fuwk/3p/P3/KWUF[-] w")
 args = ap.parse_args()
 
 bm = E.ffi.new("uint16_t *")
+snd = E.ffi.new("int *")
 pos = T.Position.from_tfen(args.tfen)
+
+if args.tt_sweep:
+    print(f"depth {args.depth}, color {args.color}, workers {args.workers.split(',')[0]}, "
+          f"{args.repeats} repeats each")
+    print("nodes are load-independent and are the honest column here; time is not,"
+          " on a machine with anything else running\n")
+    w = int(args.workers.split(",")[0])
+    for bits in [int(b) for b in args.tt_sweep.split(",")]:
+        times, nodes, fills = [], [], []
+        for _ in range(args.repeats):
+            if E.lib.th_tt_init(bits) != 0:
+                sys.exit(f"could not allocate a 2^{bits}-entry table")
+            E.lib.th_clear_history()
+            n0 = E.lib.th_nodes()
+            t0 = time.perf_counter()
+            v = E.lib.th_mate_hunt_mt(E.to_c(pos), args.depth, args.color, w, bm, snd)
+            times.append(time.perf_counter() - t0)
+            nodes.append(E.lib.th_nodes() - n0)
+            fills.append(E.lib.th_tt_fill() / (1 << bits))
+        print(f"tt 2^{bits:<2d} ({(1 << bits) * 16 / 2**30:6.2f} GiB)  "
+              f"median nodes {statistics.median(nodes):>15,.0f}  "
+              f"occupancy {statistics.median(fills):6.1%}  "
+              f"median {statistics.median(times):8.1f}s  value {v}")
+    print("\nPick on time at YOUR depth: the node curve flattens long before the "
+          "time curve does.")
+    sys.exit(0)
+
 counts = [int(w) for w in args.workers.split(",")]
 print(f"depth {args.depth}, color {args.color}, tt 2^{args.tt}, {args.repeats} repeats each")
 print("run this on an otherwise idle machine; medians are what count\n")

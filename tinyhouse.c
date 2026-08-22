@@ -566,6 +566,17 @@ int th_tt_init(int log2_entries) {
     return tt ? 0 : -1;
 }
 
+/* Occupancy of the table, for sizing decisions (TH-39). Counting is O(entries)
+ * and only meaningful between searches, so it is a tool call and nothing in the
+ * search reads it. */
+uint64_t th_tt_fill(void) {
+    if (!tt) return 0;
+    uint64_t used = 0;
+    for (uint64_t i = 0; i <= tt_mask; i++)
+        if (atomic_load_explicit(&tt[i].data, memory_order_relaxed)) used++;
+    return used;
+}
+
 static void nodes_flush(void) {
     if (tl_pending) { atomic_fetch_add_explicit(&g_nodes, tl_pending, memory_order_relaxed); tl_pending = 0; }
 }

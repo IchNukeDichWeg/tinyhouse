@@ -87,6 +87,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 54 | TH-16 (class B) | 5 | **KEPT-ON-NULL** | nodes +3.04% on the frozen suite (rows -5.63% to +7.28%, tie-break noise); time +8.15/+22.85/+7.91% on three hunts, -3.09% on mao-check perft; 74,702 positions move-set-identical to the Python engine | see below |
 | 55 | TH-13 | 5 | **CONFIRMED** | 4 of 200 root flags upgraded, 0 value changes, nodes exactly unchanged at depth 8 and -0.01% at most on the deeper suite | see below |
 | 56 | TH-17 | 5 | **REJECTED** | regression suite -11.21% at weight 512, but the deep hunts go +13.12/+15.17/+19.33% at d14/16/18 and +70.02% on the Black d18 hunt | see below |
+| 57 | TH-39 | 5 | **CONFIRMED** | node-optimal size moves with depth (2^20 at d16, 2^24 at d18); 2^26 is 14.9% full at d18, so the default is kept for the depth-20+ runs it exists for | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1544,3 +1545,43 @@ runs at depths 10 and 12, and it reported an 11% *improvement* for a change that
 costs 19% at depth 18. It is a **regression detector, not a performance proxy**,
 and its own header now has to say so -- a fixed shallow depth pair cannot stand
 in for the depth the product actually runs at.
+
+### TH-39 · the `--tt 26` default was unmeasured — CONFIRMED, default kept
+
+Measured with a new `--tt-sweep` mode and a new `th_tt_fill()` occupancy
+accessor. Single worker, White hunt from the start, fresh table and cleared
+history per run. **Nodes are the honest column** -- the machine is running other
+work, so the time column is recorded but not leaned on.
+
+**Depth 16:**
+
+| size | nodes | occupancy |
+|---|---|---|
+| 2^16 | 11,158,134 | 100.0% |
+| 2^18 | 10,124,520 | 99.2% |
+| **2^20** | **9,559,754** | 68.6% |
+| 2^22 | 9,697,568 | 25.4% |
+| 2^24 | 9,624,672 | 7.0% |
+
+**Depth 18:**
+
+| size | nodes | occupancy |
+|---|---|---|
+| 2^20 | 94,883,571 | 100.0% |
+| 2^22 | 86,755,179 | 92.1% |
+| **2^24** | **81,918,782** | 45.9% |
+| 2^26 (the default) | 86,697,633 | **14.9%** |
+
+Two things fall out. The node curve does **not** flatten monotonically -- 2^26
+is 5.8% *worse* than 2^24 at depth 18, which is locality, not noise, since a
+one-worker run with a cleared history table is deterministic. And the depth at
+which each size bottoms out moves: 2^20 at depth 16, 2^24 at depth 18.
+
+**The default stays at 26**, and the reason is the item's own warning turned
+around: occupancy at 2^26 is only **14.9%** at depth 18 and occupancy is what
+rises with depth, so the size that matters is the one for a depth-20+ overnight
+run. Lowering the default on a depth-18 curve would repeat exactly the mistake
+of lowering it on a depth-16 one.
+
+**The depth-20+ sweep is a long job and is handed over, not run**, which is what
+the item asks for. The tool and the command are in the README.

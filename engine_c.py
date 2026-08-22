@@ -64,6 +64,7 @@ uint64_t th_perft(THPos *p, int depth);
 uint64_t th_key(const THPos *p);
 uint64_t th_build_id(void);
 int th_tt_init(int log2_entries);
+uint64_t th_tt_fill(void);
 void th_seed(uint64_t s);
 int th_tt_save(const char *fname);
 int th_tt_load(const char *fname);

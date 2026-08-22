@@ -116,6 +116,23 @@ number:
 .venv/bin/python scripts/bench_workers.py --depth 22 --workers 1,2,4 --repeats 2
 ```
 
+**On `--tt`:** the default is `26` (1 GiB). Measured on this machine, single
+worker, White hunt from the start:
+
+| depth | best on nodes | occupancy at 2^26 |
+|---|---|---|
+| 16 | 2^20 (9.56M; 2^26 is not better) | 7.0% at 2^24 |
+| 18 | 2^24 (81.9M vs 86.7M at 2^26) | **14.9%** |
+
+So at the depths that finish in seconds the default is oversized — but occupancy
+is what rises with depth, and lowering the default on a depth-18 curve is
+exactly the mistake to avoid, since the table that matters is the one for a
+depth-20+ overnight run. Measure at your own target depth first:
+
+```bash
+.venv/bin/python scripts/bench_workers.py --depth 20 --tt-sweep 22,24,26,27 --repeats 2
+```
+
 **There is no honest overall ETA** — the proof depth, if one exists, is unknown. The
 printed ETA covers the current depth only, extrapolated from the measured growth
 factor between the last two depths (roughly 7x per 2 plies).

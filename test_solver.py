@@ -399,6 +399,9 @@ def test_every_cffi_symbol_has_a_contract_check(tt):
     cover("th_seed")
 
     assert E.lib.th_tt_init(18) == 0; cover("th_tt_init")
+    assert E.lib.th_tt_fill() == 0                      # a fresh table is empty
+    E.lib.th_solve(E.to_c(start), 6, bm, snd)
+    assert 0 < E.lib.th_tt_fill() <= (1 << 18); cover("th_tt_fill")
     E.lib.th_clear_history(); cover("th_clear_history")
     n0 = E.lib.th_nodes()
     E.lib.th_solve(E.to_c(start), 4, bm, snd)
