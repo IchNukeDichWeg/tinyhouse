@@ -330,3 +330,100 @@ def test_regression_harness_matches_its_baseline():
     want = json.loads(regress.BASELINE.read_text())
     assert got["digest"] == want["digest"]
     assert [r["nodes"] for r in got["rows"]] == [r["nodes"] for r in want["rows"]]
+
+
+# -- cffi signature coverage (TH-22) ----------------------------------------
+
+def _cffi_symbols():
+    import re
+
+    cdef = (DIR / "engine_c.py").read_text().split('ffi.cdef("""')[1].split('""")')[0]
+    return set(re.findall(r"\b(th_\w+)\s*\(", cdef))
+
+
+def test_every_cffi_symbol_has_a_contract_check(tt):
+    """TH-22: the search API had zero signature coverage.
+
+    A struct-layout cdef error is caught today by the existing perft tests. A
+    wrong SIGNATURE is not: with a deliberately swapped th_mate_hunt cdef the
+    suite stayed green while the function returned 0 instead of a mate score.
+    cffi ABI mode marshals by the declared types, so a wrong one mis-marshals
+    silently.
+
+    Every declared symbol is called below with an assertion about what it
+    returns. The set comparison at the end is the part that matters over time:
+    adding a cdef line without covering it fails this test.
+
+    What this cannot catch, stated rather than implied: a 64-bit return
+    declared as int is invisible while the real value stays under 2^31, so the
+    th_nodes counter is only pinned as monotonic. th_key gets a genuine width
+    check because its values are uniformly distributed over 64 bits.
+    """
+    import engine_c as E
+
+    start = T.Position.start()
+    mate9 = T.Position.from_tfen("fuwk/3p/P1F1/KWU1[-] b")
+    checked = T.Position.from_tfen("3k/1U2/4/K3[f] b")      # mao gives check
+    bm, snd = E.ffi.new("uint16_t *"), E.ffi.new("int *")
+    covered = set()
+
+    def cover(*names):
+        covered.update(names)
+
+    E.lib.th_init(); cover("th_init")                       # idempotent
+    assert E.lib.th_perft(E.to_c(start), 4) == 1855; cover("th_perft")
+    assert E.lib.th_moves(E.to_c(start), E.ffi.NULL) == 6; cover("th_moves")
+    assert E.lib.th_in_check(E.to_c(checked), T.BLACK) == 1
+    assert E.lib.th_in_check(E.to_c(start), T.WHITE) == 0; cover("th_in_check")
+    assert E.lib.th_result(E.to_c(start)) == 0
+    assert E.lib.th_result(E.to_c(T.Position.from_tfen("k3/W1F1/1K2/4[p] b"))) == -1
+    cover("th_result")
+
+    moved = E.to_c(start)
+    E.lib.th_make(moved, T.str_move("a2a3"))
+    assert moved.board[T.name_sq("a3")] == T.piece(T.WHITE, T.P) and moved.stm == T.BLACK
+    cover("th_make")
+
+    k1, k2 = E.lib.th_key(E.to_c(start)), E.lib.th_key(E.to_c(mate9))
+    assert k1 and k2 and k1 != k2 and k1 == E.lib.th_key(E.to_c(start))
+    # > 0xFFFFFFFF, not `k1 >> 32`: a key truncated to a signed int comes back
+    # negative, and in Python a negative >> 32 is -1, which is truthy. The
+    # first version of this check passed against exactly that mutation.
+    assert k1 > 0xFFFFFFFF, "th_key must be a full 64-bit value, not a truncated int"
+    cover("th_key")
+
+    E.lib.th_seed(0xC0FFEE)
+    assert E.lib.th_key(E.to_c(start)) != k1, "reseeding must change the keys"
+    E.lib.th_seed(DEFAULT_SEED)
+    assert E.lib.th_key(E.to_c(start)) == k1
+    cover("th_seed")
+
+    assert E.lib.th_tt_init(18) == 0; cover("th_tt_init")
+    E.lib.th_clear_history(); cover("th_clear_history")
+    n0 = E.lib.th_nodes()
+    E.lib.th_solve(E.to_c(start), 4, bm, snd)
+    assert E.lib.th_nodes() > n0
+    cover("th_nodes")
+
+    assert E.lib.th_search(E.to_c(mate9), 9, bm) == 29991
+    assert T.move_str(bm[0]) == "b4c2"; cover("th_search")
+    assert E.lib.th_solve(E.to_c(mate9), 9, bm, snd) == 29991 and snd[0] & 1
+    cover("th_solve")
+    assert E.lib.th_solve_mt(E.to_c(mate9), 9, 1, bm, snd) == 29991; cover("th_solve_mt")
+    assert E.lib.th_mate_hunt(E.to_c(mate9), 9, T.BLACK, bm) == 29991
+    assert E.lib.th_mate_hunt(E.to_c(mate9), 8, T.BLACK, bm) == 0; cover("th_mate_hunt")
+    assert E.lib.th_mate_hunt_mt(E.to_c(mate9), 9, T.BLACK, 2, bm) == 29991
+    cover("th_mate_hunt_mt")
+
+    mvs, vals = E.ffi.new("uint16_t[128]"), E.ffi.new("int[128]")
+    assert E.lib.th_root_moves(E.to_c(start), 4, mvs, vals) == 6; cover("th_root_moves")
+    assert E.lib.th_build_id() >> 32; cover("th_build_id")
+
+    # a path under a directory that does not exist: both must refuse. Not a
+    # directory path -- rename() onto a SYMLINK to a directory succeeds and
+    # replaces the link, which is a portability trap rather than a contract.
+    f = str(DIR / "no-such-dir" / "x.tt").encode()
+    assert E.lib.th_tt_save(f) == -1; cover("th_tt_save")
+    assert E.lib.th_tt_load(f) == -1; cover("th_tt_load")
+
+    assert _cffi_symbols() - covered == set(), "cdef symbols with no contract check"

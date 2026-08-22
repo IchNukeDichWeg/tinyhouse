@@ -62,6 +62,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 29 | TH-19 | 3 | **CONFIRMED** | in-process repeats 757,431/839,298/845,107/1,345,672/795,066 -> 757,431 x5 with th_clear_history; bench_workers prints 757,431 not '1M' | see below |
 | 30 | TH-18 | 3 | **CONFIRMED** | 9 pinned cases green; sensitivity measured: values catch 0 of 5 planted mutations, node counts catch 4 of 5 | see below |
 | 31 | TH-20 | 3 | **CONFIRMED** | catches 5 of 5 planted mutations (vs 0 of 5 for TH-18's value pin); deterministic, digest 651da0519b02a4b7 / 6,476,533 nodes, ~2s | see below |
+| 32 | TH-22 | 3 | **CONFIRMED** | 20 of 20 cdef symbols now have a contract assertion (5 previously untouched); catches 4 of 4 planted cdef errors | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -801,3 +802,33 @@ shallow pair a path-dependent-store mutation is a one-node difference, which is
 luck rather than signal. Its cost estimate was also generous: the harness is
 about 110 lines including the comparison and `--lib` calibration path, not the
 ~48 it projected for the measurement alone.
+
+### TH-22 · the search API had zero cffi signature coverage
+
+Confirmed by audit: of the 20 symbols in the cdef, five (`th_in_check`,
+`th_init`, `th_mate_hunt_mt`, `th_search`, `th_solve_mt`) were reached by no
+test at all, and `th_key` only appeared inside a comment.
+
+Every declared symbol now has a contract assertion, and the set comparison at
+the end means **adding a cdef line without covering it fails the test**.
+Calibrated in a scratch mirror against four planted cdef errors:
+
+| planted cdef error | caught |
+|---|---|
+| `th_key` declared `int` (truncating the 64-bit key) | yes |
+| `th_mate_hunt` loses its `color` argument | yes |
+| `th_solve` loses its `snd` out-parameter | yes (as an error, in the fixture) |
+| a new cdef line with no contract check | yes |
+
+**Two things this cost me, both worth recording.** My first width check was
+`assert k1 >> 32`, and it **passed** against the truncated-key mutation: a key
+truncated to a signed int comes back negative (-256,898,319), and in Python a
+negative `>> 32` is -1, which is truthy. The check is `> 0xFFFFFFFF` now. And a
+64-bit return declared `int` is undetectable while the real value stays under
+2^31, so `th_nodes` is only pinned as monotonic; the docstring says so rather
+than implying coverage it does not have.
+
+Separately, the first draft asserted that `th_tt_save` refuses a *directory*
+path. True for a real directory, but `rename()` onto a **symlink** to one
+succeeds and replaces the link -- which it duly did to a symlink in the scratch
+mirror. The check uses a path under a non-existent directory instead.
