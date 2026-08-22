@@ -1,6 +1,7 @@
 """Tinyhouse GUI backend: stdlib http.server serving index.html plus JSON
 analysis endpoints backed by the C engine, with a sqlite cache of results.
 Run: python server.py [port]"""
+import hashlib
 import json
 import sqlite3
 import threading
@@ -16,9 +17,17 @@ DIR = Path(__file__).parent
 DB = DIR / "analysis.sqlite"
 STATUS = DIR / "solve_status.json"
 
-# Bump when the search changes in a way that can change stored values, so a
-# stale cache from an older engine is never served as this engine's result.
-ENGINE_VERSION = 2
+# Cache namespace, DERIVED rather than hand-bumped (TH-42). A stale cache from
+# an older engine must never be served as this engine's result, and nobody
+# remembers to bump a constant: editing `#define MATE` and letting the rebuild
+# fire left the server serving the old values under an unchanged key. Both
+# inputs matter -- the engine decides the values, this file decides the payload
+# shape and the frames those values are expressed in.
+# Cost, named rather than discovered: any edit to either file invalidates the
+# whole cache. It is gitignored and rebuildable, and over-invalidating is the
+# safe direction.
+ENGINE_VERSION = (E.lib.th_build_id() ^ int.from_bytes(
+    hashlib.sha1(Path(__file__).read_bytes()).digest()[:8], "little")) & 0x7FFFFFFFFFFFFFFF
 
 TT_BITS = 24
 

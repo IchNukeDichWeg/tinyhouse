@@ -60,7 +60,7 @@ line per item.
 | THB-13 | setup mode silently strips the promoted flag | PENDING |
 | THB-12 | GUI history corrupted by a click before `load()` resolves | PENDING |
 | TH-40 | `/api/analyze` mixes frames: `value` white-view, `snd` mover-view | PENDING |
-| TH-42 | `ENGINE_VERSION` is hand-bumped | PENDING |
+| TH-42 | `ENGINE_VERSION` is hand-bumped | **CONFIRMED** |
 | TH-44 | error responses leak absolute filesystem paths | PENDING |
 | TH-43 | `th_solve` at `depth <= 0` returns no best move | PENDING |
 | TH-41 | cache hits replay the first computation's `nodes`/`time`/`depth` | **CONFIRMED** |

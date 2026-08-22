@@ -43,6 +43,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 10 | THB-10 | 1 | **CONFIRMED** | depth 0 and -5 now clamp to 1; repo DB had 0 rows to clean (4 rows, depths 8/14) | see below |
 | 11 | THB-09 | 1 | **CONFIRMED** | unproven rows no longer stored; build_book 8 1 keeps 0 of 7 visited (nothing that shallow is proven) | see below |
 | 12 | TH-41 | 1 | **CONFIRMED** | labelling only; no engine or node-count effect | see below |
+| 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -312,3 +313,25 @@ computation. The API keeps `nodes`/`time` for scripted consumers, next to the
 `cached` flag that says what they mean.
 
 Not a measurement item: no node count and no timing changes.
+
+### TH-42 · `ENGINE_VERSION` was hand-bumped
+
+Reproduced end to end in a scratch mirror (repo files symlinked, `tinyhouse.c`
+and `server.py` copied so the edit could not touch the working tree):
+
+| mirror state | build id | ENGINE_VERSION |
+|---|---|---|
+| stock | `0xf8a8f60c9b0c4539` | 3697319324787062899 |
+| after editing `#define MATE 30000` -> `30002` | `0xbc127ab8fe9e11c5` | 8643824827813915791 |
+
+The rebuild fires, the engine changes, and under the old hand-maintained `2`
+the cache key did not move at all. It is now `th_build_id() ^ sha1(server.py)`:
+the engine decides the values, this file decides the payload shape and the
+frames they are expressed in, so both belong in the namespace.
+
+The stock mirror and the repo agree exactly, which is the consistency check
+that the derivation depends on nothing incidental about the path.
+
+**Named cost**: any edit to either file invalidates the whole cache. It is
+gitignored and rebuildable, and over-invalidating is the safe direction. This
+also removes the manual bump TH-40 would otherwise have needed.

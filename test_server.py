@@ -165,3 +165,31 @@ def test_a_cache_hit_is_marked_and_its_provenance_is_not_this_request(srv):
     page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
     assert "from cache" in page
     assert "nodes · ${a.time}s` + (a.cached" not in page
+
+
+def test_cache_rows_are_namespaced_by_the_engine_build(srv):
+    """TH-42: ENGINE_VERSION was a hand-bumped 2.
+
+    Reproduced end to end in a scratch mirror: editing `#define MATE` fired the
+    rebuild and gave a new engine, while the server went on serving the old
+    values under an unchanged version key. It is derived now, from the compiled
+    build id and a hash of server.py -- the engine decides the values, this file
+    decides the payload shape and the frame they are expressed in.
+    """
+    import hashlib
+    import pathlib
+
+    import engine_c
+
+    server = srv.module
+    expect = (engine_c.lib.th_build_id() ^ int.from_bytes(
+        hashlib.sha1(pathlib.Path(server.__file__).read_bytes()).digest()[:8],
+        "little")) & 0x7FFFFFFFFFFFFFFF
+    assert server.ENGINE_VERSION == expect
+
+    srv("/api/analyze", tfen=MATE9, depth=10)
+    with server.DB_LOCK:
+        server.db.execute("UPDATE analysis SET version = version + 1")
+        server.db.commit()
+    code, a = srv("/api/analyze", tfen=MATE9, depth=10)
+    assert a["cached"] is False, "a row from another engine version was served"
