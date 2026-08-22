@@ -85,6 +85,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | `2556151` |
 | 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | `b4526f3` |
 | 54 | TH-16 (class B) | 5 | **KEPT-ON-NULL** | nodes +3.04% on the frozen suite (rows -5.63% to +7.28%, tie-break noise); time +8.15/+22.85/+7.91% on three hunts, -3.09% on mao-check perft; 74,702 positions move-set-identical to the Python engine | see below |
+| 55 | TH-13 | 5 | **CONFIRMED** | 4 of 200 root flags upgraded, 0 value changes, nodes exactly unchanged at depth 8 and -0.01% at most on the deeper suite | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1478,3 +1479,28 @@ cost, recorded rather than buried.
 
 The regression baseline is updated in the same commit, deliberately: digest
 `651da0519b02a4b7` -> `811f304f1eef7998`.
+
+### TH-13 · credit the symmetric `SND_LB` in mate-distance pruning — CONFIRMED
+
+Mate-distance pruning clamps alpha up to `-(MATE - ply)` and beta down to
+`MATE - ply`, and on `alpha >= beta` returned the value crediting **only** the
+top of the clamp. If alpha sits at the smallest value reachable from this ply,
+the true value is at least that, and that lower bound was being thrown away.
+
+**Sound by construction**: the value returned is identical either way, so this
+can only tighten flags. Confirmed empirically -- **0 value changes** over 200
+random positions at depth 8, and the regression suite shows no value, soundness
+or best-move change on any of its 16 rows.
+
+| measured | |
+|---|---|
+| root flags upgraded, 200 positions at depth 8 | **4 (2.0%)** |
+| value changes | **0** |
+| nodes at depth 8, 200 positions | 1,620,473 -> 1,620,473, **exactly 0** |
+| nodes on the regression suite (depths 10 and 12) | **-0.01% at most**, on 6 of 16 rows |
+
+The merge measured 2 upgrades in 200 and called it "nearly worthless"; this
+measures 4 in 200 and agrees with the characterisation. It is a one-line commit
+for flag tightness, not a performance change, and the six rows that move do so
+downward by a hundredth of a percent -- tighter flags let a few more cutoffs
+fire. Baseline updated in the same commit.

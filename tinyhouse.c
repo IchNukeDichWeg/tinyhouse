@@ -491,6 +491,7 @@ uint64_t th_key(const THPos *p) {
  *
  * A hand count needs TWO xors, not one: th_key xors zob_hand for every count
  * including 0, so moving from c to c-1 must remove c and add c-1. */
+#define MDP_SYMMETRIC_SND 1
 #define INCREMENTAL_KEY 1
 #define KEY_PARANOIA 0        /* 1 = assert the incremental key at every node */
 
@@ -793,7 +794,20 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
     /* mate distance pruning: value here is within [-(MATE-ply), MATE-ply] */
     if (alpha < -(MATE - ply)) alpha = -(MATE - ply);
     if (beta > MATE - ply) beta = MATE - ply;
-    if (alpha >= beta) { si->snd = alpha == MATE - ply ? SND_UB : 0; return alpha; }
+    /* TH-13: credit BOTH ends of the clamp, not just the top. If alpha sits at
+     * the largest value reachable from this ply the true value is at most that,
+     * so the return is a sound upper bound; if it sits at the smallest, the true
+     * value is at least that, so it is a sound lower bound. Only the first half
+     * was credited. Flag tightness only - it cannot change a value, since the
+     * return is the same either way. */
+    if (alpha >= beta) {
+#if MDP_SYMMETRIC_SND
+        si->snd = (alpha == MATE - ply ? SND_UB : 0) | (alpha == -(MATE - ply) ? SND_LB : 0);
+#else
+        si->snd = alpha == MATE - ply ? SND_UB : 0;
+#endif
+        return alpha;
+    }
 
 #if !INCREMENTAL_KEY
     key = th_key(p);

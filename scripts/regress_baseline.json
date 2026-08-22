@@ -52,7 +52,7 @@
    "value": 0,
    "snd": 0,
    "best": "c1b3",
-   "nodes": 665444
+   "nodes": 665405
   },
   {
    "tfen": "1uwk/Pf1p/4/KWUF[-] w",
@@ -76,7 +76,7 @@
    "value": 0,
    "snd": 0,
    "best": "d2c1=U",
-   "nodes": 288308
+   "nodes": 288305
   },
   {
    "tfen": "f1w1/2k1/K2p/W1UF[Up] b",
@@ -84,7 +84,7 @@
    "value": 0,
    "snd": 0,
    "best": "d2c1=U",
-   "nodes": 2600823
+   "nodes": 2600740
   },
   {
    "tfen": "1k2/4/2K1/4[PFUWpfuw] w",
@@ -100,7 +100,7 @@
    "value": 29995,
    "snd": 1,
    "best": "P@c3",
-   "nodes": 91633
+   "nodes": 91628
   },
   {
    "tfen": "1uwk/P3/3p/K2F[UWf] w",
@@ -116,7 +116,7 @@
    "value": 0,
    "snd": 0,
    "best": "U@c2",
-   "nodes": 1525987
+   "nodes": 1525857
   },
   {
    "tfen": "3k/1U2/4/K3[f] b",
@@ -132,7 +132,7 @@
    "value": 0,
    "snd": 0,
    "best": "d4c4",
-   "nodes": 112795
+   "nodes": 112785
   }
  ]
 }
