@@ -90,6 +90,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 57 | TH-39 | 5 | **CONFIRMED** | node-optimal size moves with depth (2^20 at d16, 2^24 at d18); 2^26 is 14.9% full at d18, so the default is kept for the depth-20+ runs it exists for | see below |
 | 58 | TH-37 | 6 | **CONFIRMED** | plies 1-8 reproduced exactly and independently (2,036,092 cumulative, no hashing); growth ~6/ply bending to 5.09 by ply 10 | see below |
 | 59 | TH-36 | 6 | **BLOCKED** | prototype returns a wrong DISPROVED on the recorded mate in 9, so none of its diagnostics can be trusted; shipped as groundwork with a strict xfail | see below |
+| 60 | TH-38 | 6 | **CLOSED PRE-MEASUREMENT** | no material reduction in crazyhouse, so no shrinking axis; terminals are 0.03-0.16% of positions and grow 6x/ply like everything else; cannot label DRAW | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1668,3 +1669,39 @@ returns an unsound 0, so a draw is the absence of a proof; the campaign did
 prove one for bare kings at depth 80-100 (TH-29), and nothing like it is
 reachable for the start position. A horizon-free search is still the only
 formulation that can close the draw claim.
+
+### TH-38 · bounded retrograde terminal shell — CLOSED PRE-MEASUREMENT
+
+Costed against TH-37's census, as the item asks, and closed without building it.
+
+**The structural point first, because it decides the shape of the thing.** In
+crazyhouse **material never leaves the game** -- a capture moves a unit to the
+capturer's hand -- so every reachable position holds exactly the same 8 units
+and 2 kings. The axis a classical endgame tablebase shrinks along **does not
+exist here**. A bounded retrograde must therefore be bounded by
+distance-to-terminal, not by piece count, which is a different and much less
+favourable construction.
+
+**Terminal density, measured on the exact reachable set:**
+
+| ply | positions | terminal | mate | stalemate | terminal share |
+|---|---|---|---|---|---|
+| 4 | 1,220 | 2 | 2 | 0 | 0.164% |
+| 5 | 7,751 | 2 | 2 | 0 | 0.026% |
+| 6 | 45,979 | 20 | 19 | 1 | 0.044% |
+| 7 | 291,007 | 380 | 370 | 10 | 0.131% |
+
+Terminals are one to two per thousand positions, and their absolute count grows
+at the same ~6x per ply as everything else. A k-ply predecessor shell therefore
+grows as roughly terminals x 6^k and never becomes a small set relative to the
+frontier it would serve.
+
+**Against a payoff that is close to zero.** The search already detects terminals
+exactly and for free at every node, with both soundness flags set, and TH-15's
+probe measured **87% of interior nodes cutting off on their first searched
+move** -- the last few plies before a terminal are exactly where the search is
+already cheapest. A shell would buy the cheapest part of the tree.
+
+**And the item concedes the decisive limit itself**: a bounded retrograde can
+label WIN and LOSS but never DRAW, and the draw is the open question. It cannot
+close the claim it would be built for.

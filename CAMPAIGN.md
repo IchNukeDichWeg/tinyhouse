@@ -127,7 +127,7 @@ line per item.
 |---|---|---|
 | TH-37 | reachable-position census | **CONFIRMED** |
 | TH-36 | df-pn as a second engine | **BLOCKED** (prototype fails its validation case) |
-| TH-38 | bounded retrograde terminal shell | PENDING |
+| TH-38 | bounded retrograde terminal shell | **CLOSED PRE-MEASUREMENT** |
 
 ## Tier 7 — GUI/UX
 
