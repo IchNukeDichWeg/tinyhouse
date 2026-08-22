@@ -54,6 +54,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | `72f1344` |
 | 22 | TH-01 | 2 | **CONFIRMED** | docs only; the claim is true after THB-01 but its stated reason never was | see below |
 | 23 | TH-02 | 2 | **CONFIRMED** | docs only; 4 sites, no code path touched (perft(7) 1,355,253, suite 80) | see below |
+| 24 | TH-05 | 2 | **CONFIRMED** | default workers 2 -> 1; node counts now reproducible run to run (467/3,420/23,635 three for three vs 786/807/792 at 2 workers) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -580,3 +581,30 @@ in **both** directions the backlog names:
 
 Key names in `solve_status.json` are left alone on purpose: they are the
 machine-readable contract the GUI reads, and the note now says what they mean.
+
+### TH-05 · the recorded method contradicted the documented command
+
+The contradiction is confirmed by git order: `--workers` defaulted to 2 from
+`7b3b902`, and `2125a70` then recorded `"method": "... single thread"`. The
+README's reproduction commands passed no `--workers` at all, so following them
+did not reproduce the recorded condition.
+
+**Fixed at the source rather than in the prose.** The default is 1 now, and
+this is why (three fresh runs each, `--tt 20`, start position, White):
+
+| workers | depth 6 | depth 8 | depth 10 |
+|---|---|---|---|
+| **1** | **467 / 467 / 467** | **3,420 / 3,420 / 3,420** | **23,635 / 23,635 / 23,635** |
+| 2 | 786 / 807 / 792 | 3,810 / 3,802 / 3,817 | 26,149 / 26,064 / 26,103 |
+
+Lazy SMP cannot reproduce its own node count, let alone anyone else's, and one
+and two workers tie within noise at depth 18 (median 27.8s vs 28.4s), so
+determinism costs nothing measured.
+
+**What could not be repaired, said plainly**: the worker count in force for the
+two recorded runs is not knowable now. `solve_status.json` says so rather than
+asserting "single thread", and records the deepening schedule (one process,
+from depth 6 in steps of 2) that was missing. The *claims* never depended on
+any of it -- a null-window hunt returning 0 proves the negative whatever the
+thread count -- only the node counts do, and they are now labelled as not
+exactly reproducible.

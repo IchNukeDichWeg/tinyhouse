@@ -21,7 +21,11 @@ There is no honest overall ETA: the proof depth, if one exists, is unknown.
 The ETA shown covers the current depth only, extrapolated from the measured
 growth factor between the last two completed depths.
 
-WORKERS: lazy SMP scaling here is DEPTH-DEPENDENT and only measured shallow.
+WORKERS: defaults to 1, because lazy SMP is nondeterministic - helpers
+perturb move ordering, so the same depth run twice gives different node counts
+(820 and 807 on one shallow depth). The proofs do not depend on the thread
+count; the reproducibility of the recorded node counts does.
+Scaling here is DEPTH-DEPENDENT and only measured shallow.
 At depth 18 on an Apple M2 Pro (10 cores, 3 repeats, fresh table per run) 1
 and 2 threads tie within noise (median 27.8s vs 28.4s) and 3+ regresses
 badly (52s, 50s) - helpers duplicate work and perturb move ordering in a
@@ -46,7 +50,13 @@ import tinyhouse as T
 
 ap = argparse.ArgumentParser()
 ap.add_argument("color", type=int, choices=(0, 1), help="0 = White win hunt, 1 = Black")
-ap.add_argument("--workers", type=int, default=2, help="lazy SMP threads; measure with scripts/bench_workers.py, scaling is depth-dependent")
+# Default 1, not 2 (TH-05). Lazy SMP is NONDETERMINISTIC by construction --
+# helpers perturb move ordering -- so a multi-worker run cannot reproduce its
+# own node count, let alone anyone else's: two runs of the same shallow depth
+# gave 820 and 807 nodes. One and two workers tie within noise at depth 18
+# (median 27.8s vs 28.4s), so determinism costs nothing measured. The PROOFS
+# never depended on this; only the node counts do.
+ap.add_argument("--workers", type=int, default=1, help="lazy SMP threads; >1 makes node counts nondeterministic. Measure with scripts/bench_workers.py, scaling is depth-dependent")
 ap.add_argument("--maxdepth", type=int, default=40)
 ap.add_argument("--tt", type=int, default=26, help="log2 TT entries (26 = 1 GiB, 27 = 2 GiB)")
 ap.add_argument("--tfen", default="fuwk/3p/P3/KWUF[-] w")

@@ -89,7 +89,10 @@ same command skips proven depths and reloads the table. An interrupted run costs
 most the depth it died in. Ctrl-C is safe and leaves a usable checkpoint; `--fresh`
 ignores it.
 
-**On `--workers`:** scaling is depth-dependent and only measured shallow. At depth 18
+**On `--workers`:** it defaults to **1**, because lazy SMP is nondeterministic — helpers
+perturb move ordering, so the same depth run twice gives different node counts. The
+proofs never depended on the thread count; the reproducibility of the recorded node
+counts does. Scaling is depth-dependent and only measured shallow. At depth 18
 (M2 Pro, 3 repeats, fresh table each run) 1 and 2 threads tie within noise, 3+
 regresses hard. Deeper runs may scale better as the shared table fills — that is
 unmeasured, so measure at your real target depth rather than trusting a shallow

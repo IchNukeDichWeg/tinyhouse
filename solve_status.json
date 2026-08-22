@@ -7,13 +7,15 @@
       "claim": "no forced WHITE win within 20 plies",
       "depth": 20,
       "nodes": 728842906,
-      "method": "null-window mate hunt, single thread"
+      "method": "null-window mate hunt, iterative deepening in one process from depth 6 in steps of 2",
+      "workers": "not reliably recorded for this run; see reproducibility below"
     },
     {
       "claim": "no forced BLACK win within 22 plies",
       "depth": 22,
       "nodes": 302537420,
-      "method": "null-window mate hunt, single thread"
+      "method": "null-window mate hunt, iterative deepening in one process from depth 6 in steps of 2",
+      "workers": "not reliably recorded for this run; see reproducibility below"
     }
   ],
   "proven_wins_found": [
@@ -35,6 +37,7 @@
     }
   ],
   "summary": "no forced win for either side within 20 (White) / 22 (Black) plies; game value still open",
-  "machine": "Apple M2 Pro, 10 cores, macOS 15 (Darwin 25.5.0), single thread",
-  "note": "Two claim strengths, not one. A reported mate is a proof of a forced win and, since the TT_BUDGET_GUARD in tinyhouse.c, of the distance it names: the search returns an unsound 0 at the horizon, so a mate score can only come from real terminals. A 'no forced win within N plies' bound is immune to horizon unsoundness, to a TT cutoff overrunning its budget and to store-side graph-history interaction, but not to a 64-bit Zobrist collision, which has no directional structure and could prune a subtree holding a real mate. That residual is unquantified rather than zero; re-run under a second --seed to check it. Deeper bounds: run solve_hunt.py (see README)."
+  "machine": "Apple M2 Pro, 10 cores, 16 GiB, macOS 15 (Darwin 25.5.0)",
+  "note": "Two claim strengths, not one. A reported mate is a proof of a forced win and, since the TT_BUDGET_GUARD in tinyhouse.c, of the distance it names: the search returns an unsound 0 at the horizon, so a mate score can only come from real terminals. A 'no forced win within N plies' bound is immune to horizon unsoundness, to a TT cutoff overrunning its budget and to store-side graph-history interaction, but not to a 64-bit Zobrist collision, which has no directional structure and could prune a subtree holding a real mate. That residual is unquantified rather than zero; re-run under a second --seed to check it. Deeper bounds: run solve_hunt.py (see README).",
+  "reproducibility": "The node counts above are NOT exactly reproducible and are not claimed to be. solve_hunt.py defaulted to 2 workers when these runs were made and lazy SMP is nondeterministic, so the worker count in force is not reliably recorded; the default is 1 now, which is deterministic. A cold single-depth run also differs from the iteratively-deepened slice recorded here (a re-run measured +3.4%). The CLAIMS do not depend on any of this: a null-window hunt returning 0 proves the negative whatever the thread count. Reproduce with: solve_hunt.py 0 --tt 27 --maxdepth 20  /  solve_hunt.py 1 --tt 27 --maxdepth 22"
 }
