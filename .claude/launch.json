@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "tinyhouse",
+      "name": "tinyhouse-gui",
       "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["server.py", "8653"],
       "port": 8653

@@ -50,6 +50,8 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 17 | TH-43 | 1 | **CONFIRMED** | node-identical (9,616,663 hunt d16 and 1,319,149 solve d14 on both arms); time x0.993/x1.000, inside spread | see below |
 | 18 | THB-15 | 1 | **CONFIRMED** | flag on: import now raises; divergence Python 6/36/274/2181/19317 vs C 6/33/241/1855/16021 | see below |
 | 19 | THB-14 | 1 | **CONFIRMED** | flags-only edit: dylib unchanged (sha1 4a7c8c7f) -> rebuilt (afeba22c -> 9d16118d) | see below |
+| 20 | THB-12 | 1 | **CONFIRMED** | browser-verified: two unawaited clicks record 1 move, not 2 (guard removed: 2 moves, wrong position) | see below |
+| 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -477,3 +479,34 @@ mtime was also wrong in the other direction: `git checkout` of an **older**
 
 Scope note from the backlog stands: the dylib is gitignored, so this is
 per-developer-machine only.
+
+### THB-12 · a click before `load()` resolved corrupted the history
+
+Reproduced **and** closed in the running GUI, then re-opened deliberately to
+prove the guard is load-bearing. Clicking `a2a3` and `d1c2` without awaiting:
+
+| build | `hist.moves` | landed on |
+|---|---|---|
+| guard removed (`loading = false` injected) | `["a2a3", "d1c2"]` | `fuwk/3p/P1F1/KWU1[-] b` |
+| shipped | `["a2a3"]` | `fuwk/P2p/4/KWUF[-] b` |
+
+In the broken run the history claims two moves while the position reflects only
+one: `d1c2` was resolved against the *pre-click* map, so the recorded line and
+the recorded position disagree. The backlog's correction is confirmed -- the
+existing `if (!next) return;` cannot catch it, because it checks the move
+against the stale map, i.e. against the wrong position. "Only masks it" was too
+generous; the corrupt entry is plainly visible in the history strip.
+
+Client-side only. The search always runs on the TFEN the server received, so no
+proof is affected.
+
+### THB-13 · setup mode silently stripped the promoted flag
+
+Elevated from the reporter's "GUI-only" framing on the backlog's evidence: a
+captured promoted piece returns to hand as a **pawn**, so the flag decides which
+game is analysed. From `K3/4/2k1/2F~1[-] b`, `c2c1` yields `...[p] w`; without
+the marker the same move yields `...[f] w`.
+
+Verified in the running GUI: the palette now offers 17 entries, the six
+promoted ones rendering a `~`, and selecting `F~` then clicking c1 builds
+`fuwk/3p/P3/KWF~F[-] w` -- previously impossible to express at all.

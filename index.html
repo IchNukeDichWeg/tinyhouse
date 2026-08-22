@@ -237,6 +237,13 @@ function tryMove(from, to) {
   }
 }
 function playMove(m) {
+  // THB-12: state.info still describes the PREVIOUS position until load()
+  // resolves, so a second click before then appends a move derived from the
+  // pre-click position -- with the wrong side to move, and often not legal in
+  // the position the history claims. The guard below cannot catch that: it
+  // checks the move against the stale map, i.e. against the wrong position.
+  // The trigger is not only board clicks; the moves table keeps live handlers.
+  if (loading) return;
   const next = state.info.moves[m];
   if (!next) return;   // stale UI or a move not legal in the current position
   const moves = (state.hist.moves || []).slice(0, state.histAt).concat([m]);
@@ -285,9 +292,10 @@ async function analyze() {
   } catch (e) { if (seq === analyzeSeq) $("evalbig").textContent = "error: " + e.message; }
 }
 
-let loadSeq = 0;
+let loadSeq = 0, loading = false;
 async function load(tfen) {
   const seq = ++loadSeq;
+  loading = true;
   try {
     const info = await api("/api/position", {tfen});
     if (seq !== loadSeq) return;   // a newer load already won
@@ -302,6 +310,7 @@ async function load(tfen) {
       analyzeSeq++;
     } else analyze();
   } catch (e) { alert("Bad position: " + e.message); }
+  finally { if (seq === loadSeq) loading = false; }
 }
 
 $("btnline").onclick = async () => {
@@ -321,13 +330,19 @@ $("btnline").onclick = async () => {
 };
 
 /* ---------- setup mode ---------- */
-const PAL = ["K","F","U","W","P","k","f","u","w","p","✕"];
+// THB-13: F~/U~/W~ are here because a captured promoted piece returns to hand
+// as a PAWN, so the promoted flag changes which game is analysed -- from
+// K3/4/2k1/2F~1[-] b, c2c1 yields ...[p] w, and without the marker ...[f] w.
+// Setup mode could not create one and silently destroyed an existing one.
+const PAL = ["K","F","U","W","P","F~","U~","W~","k","f","u","w","p","f~","u~","w~","✕"];
 function renderSetup() {
   const p = $("palette"); p.innerHTML = "";
   PAL.forEach(c => {
     const s = document.createElement("span");
     s.className = "pal" + (state.pal === c ? " sel" : "");
-    s.innerHTML = c === "✕" ? "✕" : `<img src="${IMG(c === c.toLowerCase() ? 1 : 0, c.toUpperCase())}">`;
+    s.innerHTML = c === "✕" ? "✕"
+      : `<img src="${IMG(c[0] === c[0].toLowerCase() ? 1 : 0, c[0].toUpperCase())}">`
+        + (c.endsWith("~") ? `<span class="pmark">~</span>` : "");
     s.title = c;
     s.onclick = () => { state.pal = c; renderSetup(); };
     p.appendChild(s);
@@ -346,8 +361,9 @@ function renderSetup() {
 }
 function setupPlace(i) {
   if (!state.pal) return;
-  if (state.pal === "✕") state.board[i] = null;
-  else state.board[i] = [state.pal.toUpperCase(), state.pal === state.pal.toLowerCase() ? 1 : 0, false];
+  const c = state.pal;
+  if (c === "✕") state.board[i] = null;
+  else state.board[i] = [c[0].toUpperCase(), c[0] === c[0].toLowerCase() ? 1 : 0, c.endsWith("~")];
   renderBoard();
 }
 function buildTfen() {

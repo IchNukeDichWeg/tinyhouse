@@ -312,3 +312,20 @@ def test_analyze_reports_a_best_move_at_every_reachable_depth(srv):
         code, a = srv("/api/analyze", tfen=START, depth=d)
         assert code == 200 and a["best"] is not None, (d, a)
         assert a["best"] in srv("/api/position", tfen=START)[1]["moves"]
+
+
+def test_the_gui_carries_its_two_client_side_guards():
+    """index.html has no test harness, so these are presence checks backing
+    browser-driven verification recorded in SCOREBOARD.md.
+
+    THB-12: playMove refuses while a load is in flight. Verified in the browser
+    by clicking a2a3 then d1c2 without awaiting -- with the guard removed the
+    history records both moves and lands on a position in which a2a3 was never
+    played.
+
+    THB-13: the setup palette can create a promoted piece. Verified in the
+    browser: selecting F~ and clicking c1 builds `fuwk/3p/P3/KWF~F[-] w`.
+    """
+    page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
+    assert "if (loading) return;" in page
+    assert '"F~","U~","W~"' in page and '"f~","u~","w~"' in page
