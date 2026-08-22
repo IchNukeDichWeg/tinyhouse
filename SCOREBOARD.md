@@ -66,6 +66,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 33 | TH-28 | 3 | **CONFIRMED** | both directions pinned; a build with a sound non-terminal horizon fails it | see below |
 | 34 | TH-30 | 3 | **CONFIRMED** | keys asserted to differ, not values; a no-op th_seed fails it | see below |
 | 35 | TH-27 | 3 | **CONFIRMED** | workers 1/2/4 all give 29991 + b4c2 at d9 and 0 at d8; helper-depth mutation passes (the budget guard absorbs it) | see below |
+| 36 | TH-32 | 3 | **CONFIRMED** | null-hypothesis calibration: identical builds measure +0.4% / -0.6% against 1.1-1.2% spread, both reported NULL; noise floor ~1% | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -870,3 +871,24 @@ pin so much as the ply-budget guard doing its job -- the deeper entries such a
 helper writes are refused at reuse when their mate distance overruns the
 budget. The pin asserts that the proof agrees, which is what it claims, and not
 that the helper schedule is unchanged.
+
+### TH-32 · a paired NPS bench for the C search
+
+`scripts/bench_ab.py`. `bench_workers.py` answers "how many threads", which is
+a different question; this answers "did this change to tinyhouse.c pay".
+
+Built around the three things that make that measurable here: a **fresh process
+per repeat** (history carry-over is worth up to 78% of a node count on its
+own), **interleaved A/B/A/B** rather than blocked AAA/BBB because this machine
+throttles, and the **first repeat discarded** with medians and spread reported.
+It reports node identity separately from time, and prints NULL itself when the
+delta is inside the worst spread.
+
+**Calibrated against the null hypothesis**: two byte-identical builds compared
+through it give **+0.4%** (hunt d14) and **-0.6%** (perft 7), both inside a
+1.1-1.2% spread, both correctly reported NULL. That fixes the noise floor for
+the tiers that follow at roughly **1%**, so a tier 4 claim below about 2% has
+to be treated as unproven rather than small.
+
+It also uses CPU time rather than wall clock, which is the one that does not
+move when something else on the machine wakes up.

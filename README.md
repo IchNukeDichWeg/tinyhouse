@@ -17,6 +17,10 @@ the stalemated player winning. Full rules with sources: [RULES.md](RULES.md).
 | `solve_status.json` | Current proven solve bounds (shown in the GUI) |
 | `scripts/build_book.py` | Precompute analyses near the start into `analysis.sqlite` |
 | `scripts/state_count.py` | Exact syntactic state-space count |
+| `scripts/regress.py` | Paired nodes-to-depth + solver-digest regression harness |
+| `scripts/bench_ab.py` | Paired A/B benchmark: fresh process per repeat, interleaved |
+| `scripts/bench_workers.py` | Pick `--workers` by measuring at your target depth |
+| `CAMPAIGN.md` / `SCOREBOARD.md` | Backlog status and the measurement behind each closed item |
 
 ## Setup and tests
 
