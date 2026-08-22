@@ -20,14 +20,28 @@ STATUS = DIR / "solve_status.json"
 # stale cache from an older engine is never served as this engine's result.
 ENGINE_VERSION = 2
 
-E.lib.th_tt_init(24)
+TT_BITS = 24
+
 # ponytail: one global engine lock -- the C search uses global TT/path state;
 # per-request engines if this ever serves more than one user
 ENGINE_LOCK = threading.Lock()
-db = sqlite3.connect(DB, check_same_thread=False)
-db.execute("CREATE TABLE IF NOT EXISTS analysis "
-           "(tfen TEXT, depth INT, version INT, json TEXT, PRIMARY KEY(tfen, depth, version))")
 DB_LOCK = threading.Lock()
+db = None
+
+
+def init(db_path=None, tt_bits=TT_BITS):
+    """Allocate the engine table and open the cache.
+
+    Deliberately not at import time. Importing this module used to allocate a
+    256 MiB transposition table and open the repo's analysis.sqlite as a side
+    effect, which is why nothing in the suite could touch the server at all.
+    """
+    global db
+    E.lib.th_tt_init(tt_bits)
+    db = sqlite3.connect(db_path or DB, check_same_thread=False)
+    db.execute("CREATE TABLE IF NOT EXISTS analysis "
+               "(tfen TEXT, depth INT, version INT, json TEXT, PRIMARY KEY(tfen, depth, version))")
+    return db
 
 
 def white_view(v: int, stm: int) -> int:
@@ -133,5 +147,6 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     import sys
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8642
+    init()
     print(f"http://127.0.0.1:{port}/")
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
