@@ -56,6 +56,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 23 | TH-02 | 2 | **CONFIRMED** | docs only; 4 sites, no code path touched (perft(7) 1,355,253, suite 80) | see below |
 | 24 | TH-05 | 2 | **CONFIRMED** | default workers 2 -> 1; node counts now reproducible run to run (467/3,420/23,635 three for three vs 786/807/792 at 2 workers) | see below |
 | 25 | TH-03 | 2 | **CONFIRMED** | PV replay: 9/9 plies legal, 0 repetitions, terminal result -1; perft(7) 1,355,253 unchanged | see below |
+| 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -631,3 +632,31 @@ mate-in-9 PV replays move by move from `fuwk/3p/P1F1/KWU1[-] b`: all nine plies
 legal, **no position repeats**, and it ends with White to move and checkmated
 (`result == -1`). It is now a test, so a change that made the published line
 illegal or repetition-dependent would fail rather than be argued about.
+
+### TH-06 · the negative bounds need the second-seed re-run too
+
+Confirmed at the cited site: the prompt lived inside `if v > 29000:` and the
+negative branch printed nothing. The argument survives because it is not
+covered by the other two immunity arguments -- horizon unsoundness and the
+ply-budget guard are both *directional*, and a 64-bit collision has no
+directional structure at all. In the hunt window a colliding `TT_UPPER` entry
+with `v <= alpha` prunes a subtree that may hold a real mate.
+
+The risk is **higher** for the negatives than for the wins, on two counts: the
+negative runs are the high-node-count ones, and *any* low-valued colliding
+entry suffices, whereas a false positive needs a collision that happens to hold
+a mate score.
+
+Printed at the **end** of the run rather than per depth, so the command it
+prints names the depth actually being trusted. Verified on all three exits:
+
+- normal exit at maxdepth 10 -> `bound so far: no forced WHITE win within 10 plies` plus the seeded re-run command;
+- **SIGINT** (a real `kill -INT` against a running hunt) -> exit 130, "checkpoint is current", advice naming depth 16, the deepest proven;
+- win branch -> unchanged, still prints it.
+
+A run already under `--seed` says so instead of suggesting a third seed.
+
+**Incidental confirmation of TH-19**: the interrupted run reported 9,746,928
+nodes at depth 16, against 9,616,663 for the same depth run cold in its own
+process. Iterative deepening in one process carries `history` over. That is the
+instrument tier's problem and it is real.

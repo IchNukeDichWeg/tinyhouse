@@ -169,12 +169,46 @@ def save_state():
               f"will re-search the current depth from an empty table.", flush=True)
 
 
+def seed_advice(depth):
+    """TH-06: the second-seed re-run is for the NEGATIVE bounds too.
+
+    The horizon-unsoundness and ply-budget arguments are both directional, so
+    neither can turn a real mate into a "no win". A 64-bit Zobrist collision
+    has no directional structure at all: it substitutes an unrelated position's
+    value, and in the hunt window a colliding TT_UPPER entry with v <= alpha
+    prunes a subtree that may hold a real mate. The risk is HIGHER here than
+    for the wins, on two counts - the negative runs are the high-node-count
+    ones, and any low-valued colliding entry suffices, whereas a false positive
+    needs a collision that happens to hold a mate score.
+    """
+    if args.seed:
+        return f"  (already under seed {args.seed:#x}; agreement across seeds is the check)"
+    return ("  a 64-bit Zobrist collision could have pruned a subtree holding a real"
+            " mate. Re-run under a second seed to make the two collision sets"
+            " independent:\n"
+            f"  python solve_hunt.py {args.color} --tt {args.tt} "
+            f"--maxdepth {depth} --seed 0xC0FFEE --fresh")
+
+
+def advise_on_bound():
+    """Print the second-seed advice for the deepest NEGATIVE bound reached.
+
+    At the end of the run, not per depth: the command it prints has to name the
+    depth actually being trusted.
+    """
+    if state["result"] is None and state["proven_no_win_through"]:
+        print(f"  bound so far: no forced {name} win within "
+              f"{state['proven_no_win_through']} plies", flush=True)
+        print(seed_advice(state["proven_no_win_through"]), flush=True)
+
+
 def on_sigint(sig, frm):
     if last_save_ok:
         print("\ninterrupted; checkpoint is current, re-run the same command to resume")
     else:
         print("\ninterrupted; the last table dump FAILED to write (see the warning "
               "above), so resuming re-searches from the last depth that saved")
+    advise_on_bound()
     sys.exit(130)
 
 
@@ -237,12 +271,11 @@ for d in range(start_depth, args.maxdepth + 1, 2):
         state["result"] = {"proven": f"{name} forces a win", "plies": 30000 - v, "depth": d}
         save_state()
         print(f"PROVEN: {name} forces a win in {30000 - v} plies", flush=True)
-        if not args.seed:
-            print("  re-verify under a second Zobrist seed before trusting it:\n"
-                  f"  python solve_hunt.py {args.color} --workers {args.workers} "
-                  f"--tt {args.tt} --maxdepth {d} --seed 0xC0FFEE --fresh", flush=True)
+        print(seed_advice(d), flush=True)
         break
     state["proven_no_win_through"] = d
     save_state()
     print(f"  => no forced {name} win within {d} plies (proven, "
           + ("checkpointed)" if last_save_ok else "progress recorded, no table dump)"), flush=True)
+
+advise_on_bound()
