@@ -427,3 +427,75 @@ def test_every_cffi_symbol_has_a_contract_check(tt):
     assert E.lib.th_tt_load(f) == -1; cover("th_tt_load")
 
     assert _cffi_symbols() - covered == set(), "cdef symbols with no contract check"
+
+
+def test_a_non_terminal_horizon_node_is_unsound(tt):
+    """TH-28, invariant #1 and nothing guarded it.
+
+    The horizon returns 0 with NO soundness flags for a non-terminal node.
+    That is the whole reason a mate score this engine reports is a proof: an
+    unsound 0 can never propagate into one. A terminal reached at the horizon
+    is the opposite case and does carry both flags, so both directions are
+    pinned here -- if only the first were, setting SND_LB|SND_UB
+    unconditionally at the horizon would pass.
+    """
+    bm, snd = tt.ffi.new("uint16_t *"), tt.ffi.new("int *")
+
+    # depth 1: every child is a horizon node, and none of them is terminal
+    v = tt.lib.th_solve(tt.to_c(T.Position.start()), 1, bm, snd)
+    assert (v, snd[0]) == (0, 0)
+
+    # depth 0 on a non-terminal root: the root itself is the horizon
+    v = tt.lib.th_solve(tt.to_c(T.Position.start()), 0, bm, snd)
+    assert (v, snd[0]) == (0, 0)
+
+    # ...but a terminal AT the horizon is sound in both directions
+    mated = T.Position.from_tfen("k3/W1F1/1K2/4[p] b")       # Black is checkmated
+    v = tt.lib.th_solve(tt.to_c(mated), 0, bm, snd)
+    assert v == -30000 and snd[0] == 3
+
+    stalemated = T.Position.from_tfen("k3/2K1/W3/4[-] b")    # and stalemate WINS
+    v = tt.lib.th_solve(tt.to_c(stalemated), 0, bm, snd)
+    assert v == 30000 and snd[0] == 3
+
+
+def test_reseeding_changes_the_keys_not_the_answers(tt):
+    """TH-30, heeding the self-kill the source report attached to it.
+
+    Asserting that a VALUE is equal under two seeds passes even if reseeding is
+    a complete no-op, so that is not the contract to pin. The contract is that
+    the keys differ -- otherwise the second-seed re-verification the whole
+    proof story leans on would be checking nothing.
+    """
+    positions = [T.Position.start(),
+                 T.Position.from_tfen("fuwk/3p/P1F1/KWU1[-] b"),
+                 T.Position.from_tfen("1k2/4/2K1/4[PFUWpfuw] w")]
+    before = [tt.lib.th_key(tt.to_c(p)) for p in positions]
+
+    tt.lib.th_seed(0xC0FFEE)
+    after = [tt.lib.th_key(tt.to_c(p)) for p in positions]
+    assert all(a != b for a, b in zip(after, before)), "reseeding did not change the keys"
+    assert len(set(after)) == len(after)
+
+    tt.lib.th_seed(DEFAULT_SEED)
+    assert [tt.lib.th_key(tt.to_c(p)) for p in positions] == before
+
+
+def test_the_smp_hunt_finds_the_same_proof_as_one_thread(tt):
+    """TH-27: nothing asserted that lazy SMP agrees with the single-threaded
+    search. Node counts cannot be compared -- helpers perturb move ordering, so
+    they differ by construction -- but the PROOF must not.
+    """
+    mate9 = "fuwk/3p/P1F1/KWU1[-] b"
+    for workers in (1, 2, 4):
+        tt.lib.th_tt_init(20)
+        tt.lib.th_clear_history()
+        bm = tt.ffi.new("uint16_t *")
+        v = tt.lib.th_mate_hunt_mt(tt.to_c(T.Position.from_tfen(mate9)), 9, T.BLACK, workers, bm)
+        assert v == 29991, f"{workers} workers gave {v}"
+        assert T.move_str(bm[0]) == "b4c2"
+
+        tt.lib.th_tt_init(20)
+        tt.lib.th_clear_history()
+        assert tt.lib.th_mate_hunt_mt(tt.to_c(T.Position.from_tfen(mate9)), 8, T.BLACK,
+                                      workers, bm) == 0

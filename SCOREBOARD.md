@@ -63,6 +63,9 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 30 | TH-18 | 3 | **CONFIRMED** | 9 pinned cases green; sensitivity measured: values catch 0 of 5 planted mutations, node counts catch 4 of 5 | see below |
 | 31 | TH-20 | 3 | **CONFIRMED** | catches 5 of 5 planted mutations (vs 0 of 5 for TH-18's value pin); deterministic, digest 651da0519b02a4b7 / 6,476,533 nodes, ~2s | see below |
 | 32 | TH-22 | 3 | **CONFIRMED** | 20 of 20 cdef symbols now have a contract assertion (5 previously untouched); catches 4 of 4 planted cdef errors | see below |
+| 33 | TH-28 | 3 | **CONFIRMED** | both directions pinned; a build with a sound non-terminal horizon fails it | see below |
+| 34 | TH-30 | 3 | **CONFIRMED** | keys asserted to differ, not values; a no-op th_seed fails it | see below |
+| 35 | TH-27 | 3 | **CONFIRMED** | workers 1/2/4 all give 29991 + b4c2 at d9 and 0 at d8; helper-depth mutation passes (the budget guard absorbs it) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -832,3 +835,38 @@ Separately, the first draft asserted that `th_tt_save` refuses a *directory*
 path. True for a real directory, but `rename()` onto a **symlink** to one
 succeeds and replaces the link -- which it duly did to a symlink in the scratch
 mirror. The check uses a path under a non-existent directory instead.
+
+### TH-28 · the horizon "non-terminal is UNSOUND" invariant
+
+Invariant #1 -- the reason a mate score this engine reports is a proof at all --
+and nothing guarded it. Pinned in both directions on purpose: a non-terminal
+horizon node returns `(0, snd 0)`, and a *terminal* reached at the horizon
+returns `(-30000, snd 3)` for mate and `(+30000, snd 3)` for stalemate (which
+wins here). Pinning only the first would pass a build that set
+`SND_LB|SND_UB` unconditionally at the horizon.
+
+Calibrated: a scratch build returning `SND_LB|SND_UB` for a non-terminal
+horizon node **fails** this test.
+
+### TH-30 · the Zobrist reseed contract
+
+Landed with the source report's own self-kill heeded: asserting a *value* is
+equal under two seeds passes even if reseeding is a complete no-op, so the
+contract pinned is that the **keys differ**, over three positions, and that
+restoring the original seed restores the original keys.
+
+Calibrated: a scratch build whose `th_seed` returns early after the first call
+**fails** this test.
+
+### TH-27 · the SMP hunt agrees with one thread
+
+Workers 1, 2 and 4 all return 29991 with best move `b4c2` at depth 9 on the
+recorded line, and 0 at depth 8. Node counts are deliberately not compared:
+helpers perturb move ordering, so they differ by construction.
+
+**Honest limit, measured.** A scratch build whose helpers search `depth + 6`
+instead of `depth + (i & 1)` **passes** this test. That is not a hole in the
+pin so much as the ply-budget guard doing its job -- the deeper entries such a
+helper writes are refused at reuse when their mate distance overruns the
+budget. The pin asserts that the proof agrees, which is what it claims, and not
+that the helper schedule is unchanged.
