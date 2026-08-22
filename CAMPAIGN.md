@@ -85,7 +85,7 @@ line per item.
 | TH-18 | pin the recorded proofs | PENDING |
 | TH-22 | cffi signature coverage for the search API | PENDING |
 | TH-28 | pin the horizon "non-terminal is UNSOUND" invariant | PENDING |
-| TH-21 | pin the TT save/load round trip and the seed/size refusals | PENDING |
+| TH-21 | pin the TT save/load round trip and the seed/size refusals | **CONFIRMED** |
 | TH-32 | a paired NPS bench for the C search | PENDING |
 | TH-20 | paired nodes-to-depth + solver-digest regression harness | PENDING |
 | TH-31 | `th_nodes()` has no reset and does not count perft | PENDING |

@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 import tinyhouse as T
 
 DIR = Path(__file__).parent
@@ -93,3 +95,65 @@ def test_recorded_proofs_reproduce():
     assert hunt("fuwk/3p/P1F1/KWU1[-] b", 8, T.BLACK) == 0         # ...and not in 8
     assert hunt("1uwk/1f1p/PW2/K1UF[-] w", 13, T.WHITE) == 29987   # mate in 13
     assert hunt("1uwk/Pf1p/4/KWUF[-] w", 13, T.WHITE) == 29987     # mate in 13
+
+
+# -- transposition table persistence ----------------------------------------
+
+DEFAULT_SEED = 0x9E3779B97F4A7C15
+
+
+@pytest.fixture
+def tt():
+    """A 2^12 table with a few real entries in it, default Zobrist seed.
+
+    Restores the seed afterwards: reseeding rebuilds the Zobrist tables for the
+    whole process, so a test that forgets silently changes every key for every
+    later test.
+    """
+    import engine_c as E
+
+    E.lib.th_seed(DEFAULT_SEED)
+    E.lib.th_tt_init(12)
+    bm, snd = E.ffi.new("uint16_t *"), E.ffi.new("int *")
+    E.lib.th_solve(E.to_c(T.Position.start()), 6, bm, snd)
+    yield E
+    E.lib.th_seed(DEFAULT_SEED)
+
+
+def test_tt_save_load_round_trip(tt, tmp_path):
+    """TH-21: every documented return code of th_tt_save/th_tt_load.
+
+    Content, not just codes: after a reseed makes the load fail, restoring the
+    original seed makes the *same file* load again, which shows the refusal is
+    keyed to tt_seed_used and not to something incidental about the file.
+    """
+    f = str(tmp_path / "a.tt").encode()
+    assert tt.lib.th_tt_save(f) == 0
+    assert tt.lib.th_tt_load(f) == 0                      # same table, same seed
+
+    tt.lib.th_tt_init(13)
+    assert tt.lib.th_tt_load(f) == -2                     # wrong entry count
+
+    tt.lib.th_tt_init(12)
+    tt.lib.th_seed(12345)
+    assert tt.lib.th_tt_load(f) == -2                     # wrong Zobrist seed
+    tt.lib.th_seed(DEFAULT_SEED)
+    assert tt.lib.th_tt_load(f) == 0                      # ...and back again
+
+    assert tt.lib.th_tt_load(str(tmp_path / "nope.tt").encode()) == -1
+    assert tt.lib.th_tt_save(str(tmp_path).encode()) == -1          # a directory
+
+    raw = (tmp_path / "a.tt").read_bytes()
+    (tmp_path / "magic.tt").write_bytes(b"NOTMAGIC" + raw[8:])
+    assert tt.lib.th_tt_load(str(tmp_path / "magic.tt").encode()) == -1
+    (tmp_path / "short.tt").write_bytes(raw[: len(raw) // 2])
+    assert tt.lib.th_tt_load(str(tmp_path / "short.tt").encode()) == -1
+
+
+def test_tt_save_and_load_refuse_without_a_table():
+    """Both return -1 before th_tt_init has ever run. Needs a cold process:
+    once any test in the run allocates a table it stays allocated."""
+    out = _cold("""
+print(E.lib.th_tt_save(b"/dev/null"), E.lib.th_tt_load(b"/dev/null"))
+""")
+    assert out == "-1 -1"

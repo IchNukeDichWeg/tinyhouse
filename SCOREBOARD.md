@@ -37,6 +37,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 4 | THB-05 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; whole-suite cost of validating every to_c call is 4.63s -> 4.68s (noise) | see below |
 | 5 | THB-04 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; guard is a no-op on legal input (no king capture is generated from a validated position) | see below |
 | 6 | THB-06 | 1 | **CONFIRMED** | parse-time rejection; perft(7) 1,355,253 unchanged | see below |
+| 7 | TH-21 | 3 | **CONFIRMED** | coverage; suite 59 -> 61 tests, +0.0s | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -174,3 +175,22 @@ rejected; they are different severities and stay separately described.
 
 Latent in the shipped product either way -- the only caller passing strings to
 `str_move` is the test suite. perft(7) unchanged at 1,355,253.
+
+### TH-21 · TT save/load round trip and the seed/size refusals
+
+**Landed out of tier order, on purpose.** THB-07 widens the dump header, and
+the backlog's own note says this has to exist first or the widening cannot be
+verified. Pulling the dependency forward beat marking THB-07 BLOCKED.
+
+All eight documented codes verified on the shipped build before writing the
+test: save 0 · load same seed 0 · wrong entry count -2 · wrong seed -2 ·
+missing -1 · bad magic -1 · truncated -1 · save or load with no table -1. Save
+to a directory path is also -1.
+
+**Demonstrated against a planted mutation**, since a coverage test that has
+never failed proves nothing. A scratch build with the `hdr[2] != tt_seed_used`
+check deleted returns **0** where the test asserts **-2**.
+
+The fixture restores `th_seed(0x9E3779B97F4A7C15)` afterwards: reseeding
+rebuilds the Zobrist tables process-wide, so a test that forgets silently
+changes every key for every later test in the run.
