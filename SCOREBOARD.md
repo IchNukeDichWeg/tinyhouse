@@ -79,6 +79,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 46 | TH-08 | 4 | **CONFIRMED** | +4.04% solve d14, +3.69/+3.93% hunt d16 vs a 0.2-0.4% control; NULL on drop-heavy; node-identical | see below |
 | 47 | TH-09 | 4 | **CONFIRMED** | +5.24% solve d14, +5.56/+5.15% hunt d16, +6.06% drop-heavy vs 0.0-0.8% controls; perft +1.00% (reported 1.071x); node-identical | see below |
 | 48 | TH-10 | 4 | **CONFIRMED** | +7.92% solve d14, +7.44/+7.47% hunt d16, +3.78% drop-heavy, perft +0.34% (no regression); KEY_PARANOIA clean over 123M nodes incl. SMP | see below |
+| 49 | TH-12 | 4 | **CONFIRMED** | +10.16% perft(7), +39.56% drop-heavy perft, +2.53% solve d14, +2.95% hunt d16 vs controls under 0.4%; node-identical | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1208,3 +1209,28 @@ Toggle-off measures +0.24% against the original tree: a clean pin.
 **+16.9% on both**, node-identical throughout (9,616,663 and 1,319,149 on every
 arm). The three individual gains multiply to 1.175 against a measured 1.169,
 which is the consistency check that they are independent and really additive.
+
+### TH-12 · hoist `king_sq` out of the legality loop — CONFIRMED, and the unmeasured half is now measured
+
+Node-identical; digest unchanged; the slow proofs still pass.
+
+| workload | control | TH-12 | verdict |
+|---|---|---|---|
+| perft(7), start | +0.02% | **+10.16%** | signal |
+| perft(4), drop-heavy `1k2/4/2K1/4[PFUWpfuw] w` | -0.11% | **+39.56%** | signal |
+| solve d14, start | -0.33% | **+2.53%** | signal |
+| hunt d16, start | +0.19% | **+2.95%** | signal |
+
+The item calls the search-side effect **UNMEASURED**; it is **+2.5 to +3.0%**.
+Its perft figure (1.092x at low load, 1.059x under contention, 1.144x at
+perft(8)) brackets the +10.16% measured here at perft(7), so "not reproducible
+as a single number" is fair and the range holds.
+
+The **+39.56% on drop-heavy perft** is new. It follows from the mechanism: a
+drop-heavy node has many pseudo-moves, and the hoisted 16-square scan was paid
+once per move.
+
+**The trap the item names is in the code and load-bearing.** The drop test comes
+first, because for a drop `M_FROM(m)` is the piece TYPE (0-3), which aliases
+square indices 0-3 -- a bare `M_FROM(m) == ks` would false-positive whenever the
+mover's own king stands on rank 1, which is where it starts.

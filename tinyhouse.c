@@ -111,6 +111,16 @@ int th_in_check(const THPos *p, int color) {
     return attacked(p, king_sq(p, color), 1 - color);
 }
 
+/* TH-12: the mover's king square is loop-invariant across a legality scan
+ * except for the one move that moves the king, so king_sq()'s 16-square scan
+ * does not need repeating per move.
+ *
+ * The drop test MUST come first. For a drop, M_FROM(m) is the piece TYPE (0-3),
+ * which aliases square indices 0-3, so a bare `M_FROM(m) == ks` false-positives
+ * whenever the mover's own king stands on rank 1. */
+#define KING_SQ_HOIST 1
+#define KS_AFTER(m, ks) ((!M_IS_DROP(m) && M_FROM(m) == (ks)) ? M_TO(m) : (ks))
+
 typedef struct { uint16_t m; int8_t captured; } Undo;
 
 static void make(THPos *p, uint16_t m, Undo *u) {
@@ -243,9 +253,18 @@ int th_moves(THPos *p, uint16_t *out) {
     uint16_t buf[128];
     int n = pseudo_moves(p, buf), nl = 0;
     Undo u;
+#if KING_SQ_HOIST
+    int ks = king_sq(p, p->stm);
+#endif
     for (int i = 0; i < n; i++) {
+#if KING_SQ_HOIST
+        int myks = KS_AFTER(buf[i], ks);
+        make(p, buf[i], &u);
+        if (!attacked(p, myks, p->stm)) {
+#else
         make(p, buf[i], &u);
         if (!th_in_check(p, 1 - p->stm)) {
+#endif
             if (out) out[nl] = buf[i];
             nl++;
         }
@@ -268,9 +287,18 @@ uint64_t th_perft(THPos *p, int depth) {
     if (depth == 0) return 1;
     int n = pseudo_moves(p, buf);
     uint64_t total = 0;
+#if KING_SQ_HOIST
+    int ks = king_sq(p, p->stm);
+#endif
     for (int i = 0; i < n; i++) {
+#if KING_SQ_HOIST
+        int myks = KS_AFTER(buf[i], ks);
+        make(p, buf[i], &u);
+        if (!attacked(p, myks, p->stm))
+#else
         make(p, buf[i], &u);
         if (!th_in_check(p, 1 - p->stm))
+#endif
             total += depth == 1 ? 1 : th_perft(p, depth - 1);
         unmake(p, &u);
     }
@@ -625,9 +653,18 @@ static int horizon_has_move(THPos *p, int in_check) {
     uint16_t buf[128];
     int n = pseudo_moves(p, buf);
     Undo u;
+#if KING_SQ_HOIST
+    int ks = king_sq(p, p->stm);
+#endif
     for (int i = 0; i < n; i++) {
+#if KING_SQ_HOIST
+        int myks = KS_AFTER(buf[i], ks);
+        make(p, buf[i], &u);
+        int ok = !attacked(p, myks, p->stm);
+#else
         make(p, buf[i], &u);
         int ok = !th_in_check(p, 1 - p->stm);
+#endif
         unmake(p, &u);
         if (ok) return 1;
     }
@@ -690,6 +727,9 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
     int n = pseudo_moves(p, buf);
     int scores[128];
     int enemy_ks = king_sq(p, 1 - p->stm);
+#if KING_SQ_HOIST
+    int my_ks = king_sq(p, p->stm);
+#endif
     for (int i = 0; i < n; i++) scores[i] = order_score(p, buf[i], ttm, ply, enemy_ks);
 
     int best = -MATE, alpha0 = alpha;
@@ -701,8 +741,14 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
         for (int j = i + 1; j < n; j++) if (scores[j] > scores[bi]) bi = j;
         uint16_t m = buf[bi]; buf[bi] = buf[i]; scores[bi] = scores[i]; buf[i] = m;
         uint64_t ckey = key_after(p, m, key);      /* before make: reads the pre-move board */
+#if KING_SQ_HOIST
+        int myks = KS_AFTER(m, my_ks);
+        make(p, m, &u);
+        if (attacked(p, myks, p->stm)) { unmake(p, &u); continue; }
+#else
         make(p, m, &u);
         if (th_in_check(p, 1 - p->stm)) { unmake(p, &u); continue; }
+#endif
         any = 1;
         SInfo ci;
         int v = -search(p, depth - 1, ply + 1, -beta, -alpha, &ci, ckey);

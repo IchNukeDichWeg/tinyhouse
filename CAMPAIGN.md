@@ -107,7 +107,7 @@ line per item.
 | TH-08 | horizon fast path | **CONFIRMED** |
 | TH-09 | drops from a precomputed empty-square mask | **CONFIRMED** |
 | TH-10 | incremental Zobrist key | **CONFIRMED** |
-| TH-12 | hoist `king_sq` out of the legality loop | PENDING |
+| TH-12 | hoist `king_sq` out of the legality loop | **CONFIRMED** |
 | TH-11 | fast legality (perft/`th_moves` half only) | PENDING |
 | TH-16 | prune drops that cannot resolve a check | PENDING |
 | TH-15 | staged movegen: TT move before the full list | PENDING |
