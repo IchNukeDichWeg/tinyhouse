@@ -75,6 +75,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 42 | TH-26 | 3 | **CONFIRMED** | resume, --fresh and build-mismatch paths all pinned by subprocess | see below |
 | 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | see below |
 | 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | see below |
+| 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1061,3 +1062,35 @@ This also corrects the merge's own note on TH-36: "cannot prove a draw at any
 depth at which any line still reaches the horizon" is right, and the honest
 addition is that such a depth is reachable today for bare kings. It is
 nowhere near reachable for the start position, which is what df-pn is for.
+
+### TH-25 · symmetry-orbit perft — REJECTED, measured
+
+The factual half is confirmed: all four orbit members (identity, file mirror,
+sigma, and their composition) of all five `PERFT_ORACLE` positions match the
+published counts exactly, 0 mismatches.
+
+The value proposition is refuted, and independently of the merge's own
+measurement. Eight rules bugs planted in `pseudo_moves`, each run against both
+the identity-position assertion and the orbit-only members:
+
+| planted rules bug | identity | orbit-only |
+|---|---|---|
+| ferz loses two diagonals | CAUGHT | caught |
+| wazir loses one direction | CAUGHT | caught |
+| king loses its diagonals | CAUGHT | caught |
+| mao ignores its blocker | CAUGHT | caught |
+| pawn droppable on rank 4 | CAUGHT | caught |
+| pawn pushes two squares | CAUGHT | caught |
+| promotion offers only F | CAUGHT | caught |
+| capture-promotion offers only W | CAUGHT | caught |
+| **total** | **8 of 8** | **0 additional** |
+
+The merge measured 6/8 for the orbit against 8/8 for the identity and killed it
+on that; this measures 8/8 against 8/8, which is the same verdict reached from
+the other side -- the orbit is strictly dominated either way, because it is
+blind to any error symmetric under the group, which is every uniform geometry
+error. Roughly 30 lines of test for zero measured detection: **not merged**.
+
+The residue is kept where it does pay: `sigma` lives in `test_server.py`, where
+a colour-mirrored pair is exactly the right instrument for the TH-40 frame
+duality.

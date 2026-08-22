@@ -968,6 +968,13 @@ thing. Each entry keeps its ID permanently.
 | **K-02** | Sparse `.tt` dump (`opus-5` 29) | **Measured not worth it.** Saves 0.36s per checkpoint at the 1 GiB default, once per depth, against depths costing minutes to hours — and it saves least where it would matter, because occupancy rises with depth (0.98% → 41.7% at 2^24 over d14→d18; 3.9% → 91.7% at 2^22). At overnight depths a sparse format would be *larger*. The useful residue became TH-39. |
 | **K-03** | Sigma-mirror as a draw strategy (`opus-5` 27) | **Refuted, and more strongly than published.** Exhaustive closed walk: mirror break rate 20.52% (not ~22%), and **13,736** positions where White's move checkmates Black outright — 2.9x the reported 4,804. The start *is* sigma-symmetric and the balance invariant holds (0 of 4,134,968 failures), but the strategy loses. |
 
+## Killed during the campaign (see SCOREBOARD.md for the measurement)
+
+| ID | Item | Why it died |
+|---|---|---|
+| **TH-25** | Assert published perft counts on the symmetry orbit | **Measured to add nothing, independently of the merge's own measurement.** All four orbit members of all five oracle positions match the published counts (0 mismatches), so the factual half stands. But against eight planted rules bugs -- ferz, wazir and king geometry, mao blocking, the pawn drop rule, pawn push distance, and both promotion lists -- the existing identity-position perft caught **8 of 8** and the orbit caught **0** that it did not. The merge measured 6/8 vs 8/8 and reached the same verdict; this is 8/8 vs 8/8, which is the same conclusion from the other side. Structurally blind to any error symmetric under the group, which is every uniform geometry error. The `sigma` mirror itself does earn its place elsewhere: `test_server.py` uses it to pin the TH-40 frame duality, where a colour-mirrored pair is exactly the right instrument. |
+| **TH-07** | "exists exactly twice" comment | **Moot, not killed on merit.** The comment moved into `Position.validate()` during THB-05's refactor and was rewritten as "at most twice", which is the change the item asks for. Re-measured: 8 of the repo's TFEN literals are full and 11 under-full, so softening the doc was the right direction and tightening the code would have been wrong. |
+
 ## Partial refutations folded into surviving items
 
 - **Promoted-*pawn* half of THB-02** — `P~` is bucketed correctly under `P`; only the

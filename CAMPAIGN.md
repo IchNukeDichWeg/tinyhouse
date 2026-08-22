@@ -98,7 +98,7 @@ line per item.
 | TH-29 | pin a draw-by-repetition proof | **CONFIRMED** |
 | TH-26 | test the `solve_hunt` resume/checkpoint round trip | **CONFIRMED** |
 | TH-33 | cross-check `state_count.py`, delete its dead stub | **CONFIRMED** |
-| TH-25 | assert published perft counts on the symmetry orbit | PENDING |
+| TH-25 | assert published perft counts on the symmetry orbit | **REJECTED** |
 
 ## Tier 4 — NPS (node-identical), one at a time
 
