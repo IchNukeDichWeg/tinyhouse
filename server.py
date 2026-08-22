@@ -41,6 +41,11 @@ def init(db_path=None, tt_bits=TT_BITS):
     db = sqlite3.connect(db_path or DB, check_same_thread=False)
     db.execute("CREATE TABLE IF NOT EXISTS analysis "
                "(tfen TEXT, depth INT, version INT, json TEXT, PRIMARY KEY(tfen, depth, version))")
+    # THB-10 let depth<1 rows into older databases. Nothing can produce one
+    # again, and a stored one would be served forever under a key no honest
+    # search reaches.
+    db.execute("DELETE FROM analysis WHERE depth < 1")
+    db.commit()
     return db
 
 
@@ -134,7 +139,12 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path == "/api/position":
                 self.send_json(position_info(q["tfen"]))
             elif url.path == "/api/analyze":
-                self.send_json(analyze(q["tfen"], min(int(q.get("depth", 12)), 22)))
+                # THB-10: clamped BOTH ways. With no floor, depth=0 reached the
+                # engine; the root skips the TT cutoff so the headline value
+                # stayed 0 while the per-move array came straight out of the
+                # table, producing a payload that contradicted itself and a
+                # cache row under a key no honest search can ever reproduce.
+                self.send_json(analyze(q["tfen"], max(1, min(int(q.get("depth", 12)), 22))))
             elif url.path == "/api/status":
                 status = json.loads(STATUS.read_text()) if STATUS.exists() else {}
                 self.send_json(status)

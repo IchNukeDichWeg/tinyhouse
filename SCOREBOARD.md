@@ -40,6 +40,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 7 | TH-21 | 3 | **CONFIRMED** | coverage; suite 59 -> 61 tests, +0.0s | see below |
 | 8 | THB-07 | 1 | **CONFIRMED** | foreign-rule dump: rc 0 -> -3; header 24 -> 32 bytes, so pre-existing dumps are invalidated by design | see below |
 | 9 | THB-08 | 1 | **CONFIRMED** | failed save: silent exit-0 -> WARNING + intact previous dump; perft(7) 1,355,253 unchanged | see below |
+| 10 | THB-10 | 1 | **CONFIRMED** | depth 0 and -5 now clamp to 1; repo DB had 0 rows to clean (4 rows, depths 8/14) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -246,3 +247,19 @@ perft(7) unchanged at 1,355,253.
 **Incidental**: two `solve_hunt` runs of the same depth reported 820 and 807
 nodes. That is not drift, it is `--workers 2` -- lazy SMP is nondeterministic
 by construction. Every campaign measurement uses one worker.
+
+### THB-10 · `/api/analyze` clamped depth above but not below
+
+Reproduced against the real handler: `depth=0` and `depth=-5` both reached the
+engine and came back labelled `"depth": 0` / `"depth": -5`.
+
+The backlog's correction is the one that matters, and it holds: the top-level
+`value` does **not** show a mate, because the root skips the TT cutoff
+(`ply > 0`). The mate appears only inside `moves`, which is worse than a plain
+wrong number -- the payload is self-contradictory, a headline "no forced win
+within horizon" sitting directly above a move listed as a forced win. And the
+row is then frozen into the cache under a key no honest search can reproduce.
+
+Clamped both ways, and `init()` deletes any `depth < 1` row left in an older
+database. The repo's own `analysis.sqlite` has none (4 rows, depths 8 and 14),
+so this is prophylactic rather than a repair.

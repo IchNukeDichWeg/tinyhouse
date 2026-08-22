@@ -53,7 +53,7 @@ line per item.
 | THB-06 | `str_move('K@a1')` fabricates a king drop | **CONFIRMED** |
 | THB-08 | `save_state()` discards `th_tt_save`'s return; save truncates on open | **CONFIRMED** |
 | THB-09 | sqlite cache row is a function of live TT state, not of its key | PENDING |
-| THB-10 | `/api/analyze` clamps depth above but not below | PENDING |
+| THB-10 | `/api/analyze` clamps depth above but not below | **CONFIRMED** |
 | THB-11 | one abandoned `/api/analyze` pins `ENGINE_LOCK` | PENDING |
 | THB-15 | `DOUBLE_STEP` has no C counterpart | PENDING |
 | THB-14 | dylib rebuild trigger ignores the compile flags | PENDING |
