@@ -133,6 +133,31 @@ depth-20+ overnight run. Measure at your own target depth first:
 .venv/bin/python scripts/bench_workers.py --depth 20 --tt-sweep 22,24,26,27 --repeats 2
 ```
 
+### Still owed
+
+Things this repo does **not** know, kept explicit so nobody has to rediscover
+them:
+
+- **The game value.** No forced win for either side within 20 (White) / 22
+  (Black) plies; beyond that, open. The engine can prove a *draw* only where no
+  line still reaches its horizon, which today means bare kings around depth 80,
+  not the start position.
+- **A second-seed re-verification of the two published bounds at full depth.**
+  The wins are re-verified under `--seed 0xC0FFEE`; the bounds are not, and a
+  64-bit Zobrist collision is the one residual with no directional structure.
+  `solve_hunt.py` prints the command when a run ends.
+- **The right `--tt` at depth 20+.** Measured at 16 and 18 (see above);
+  the sweep at the depth that matters is a multi-hour job.
+- **`--workers` at depth 20+.** One and two tie within noise at 18, three and
+  beyond regress; deeper is unmeasured, and `scripts/bench_workers.py` is the
+  tool.
+- **A working df-pn engine.** `scripts/dfpn.py` is a prototype that fails its
+  own validation case; the draw claim needs a horizon-free search and this is
+  not one yet.
+- **Whether history carry-over across iterative-deepening depths helps.**
+  `CLEAR_HISTORY_AT_ROOT` exists and is off, because that is a different
+  experiment from repeats at one depth and nobody has run it.
+
 **There is no honest overall ETA** — the proof depth, if one exists, is unknown. The
 printed ETA covers the current depth only, extrapolated from the measured growth
 factor between the last two depths (roughly 7x per 2 plies).

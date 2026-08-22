@@ -84,16 +84,16 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | `290c749` |
 | 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | `2556151` |
 | 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | `b4526f3` |
-| 54 | TH-16 (class B) | 5 | **KEPT-ON-NULL** | nodes +3.04% on the frozen suite (rows -5.63% to +7.28%, tie-break noise); time +8.15/+22.85/+7.91% on three hunts, -3.09% on mao-check perft; 74,702 positions move-set-identical to the Python engine | see below |
-| 55 | TH-13 | 5 | **CONFIRMED** | 4 of 200 root flags upgraded, 0 value changes, nodes exactly unchanged at depth 8 and -0.01% at most on the deeper suite | see below |
-| 56 | TH-17 | 5 | **REJECTED** | regression suite -11.21% at weight 512, but the deep hunts go +13.12/+15.17/+19.33% at d14/16/18 and +70.02% on the Black d18 hunt | see below |
-| 57 | TH-39 | 5 | **CONFIRMED** | node-optimal size moves with depth (2^20 at d16, 2^24 at d18); 2^26 is 14.9% full at d18, so the default is kept for the depth-20+ runs it exists for | see below |
-| 58 | TH-37 | 6 | **CONFIRMED** | plies 1-8 reproduced exactly and independently (2,036,092 cumulative, no hashing); growth ~6/ply bending to 5.09 by ply 10 | see below |
-| 59 | TH-36 | 6 | **BLOCKED** | prototype returns a wrong DISPROVED on the recorded mate in 9, so none of its diagnostics can be trusted; shipped as groundwork with a strict xfail | see below |
-| 60 | TH-38 | 6 | **CLOSED PRE-MEASUREMENT** | no material reduction in crazyhouse, so no shrinking axis; terminals are 0.03-0.16% of positions and grow 6x/ply like everything else; cannot label DRAW | see below |
-| 61 | TH-45 | 7 | **CONFIRMED** | browser-verified: black start gives 1...d3d2 / 2.a2a3, white start 1.a2a3 / d3d2 | see below |
-| 62 | TH-46 | 7 | **CONFIRMED** | browser-verified: banner, king-square highlight, and c1b3+ in the moves table | see below |
-| 63 | TH-47 | 7 | **CONFIRMED** | hardcoded type kept as the safer choice; .svg suffix now required, so it is provably correct | see below |
+| 54 | TH-16 (class B) | 5 | **KEPT-ON-NULL** | nodes +3.04% on the frozen suite (rows -5.63% to +7.28%, tie-break noise); time +8.15/+22.85/+7.91% on three hunts, -3.09% on mao-check perft; 74,702 positions move-set-identical to the Python engine | `92d5bab` |
+| 55 | TH-13 | 5 | **CONFIRMED** | 4 of 200 root flags upgraded, 0 value changes, nodes exactly unchanged at depth 8 and -0.01% at most on the deeper suite | `fd0affc` |
+| 56 | TH-17 | 5 | **REJECTED** | regression suite -11.21% at weight 512, but the deep hunts go +13.12/+15.17/+19.33% at d14/16/18 and +70.02% on the Black d18 hunt | `c45b722` |
+| 57 | TH-39 | 5 | **CONFIRMED** | node-optimal size moves with depth (2^20 at d16, 2^24 at d18); 2^26 is 14.9% full at d18, so the default is kept for the depth-20+ runs it exists for | `8052e7a` |
+| 58 | TH-37 | 6 | **CONFIRMED** | plies 1-8 reproduced exactly and independently (2,036,092 cumulative, no hashing); growth ~6/ply bending to 5.09 by ply 10 | `f2982a3` |
+| 59 | TH-36 | 6 | **BLOCKED** | prototype returns a wrong DISPROVED on the recorded mate in 9, so none of its diagnostics can be trusted; shipped as groundwork with a strict xfail | `5c98bb6` |
+| 60 | TH-38 | 6 | **CLOSED PRE-MEASUREMENT** | no material reduction in crazyhouse, so no shrinking axis; terminals are 0.03-0.16% of positions and grow 6x/ply like everything else; cannot label DRAW | `ed382d2` |
+| 61 | TH-45 | 7 | **CONFIRMED** | browser-verified: black start gives 1...d3d2 / 2.a2a3, white start 1.a2a3 / d3d2 | `2064f92` |
+| 62 | TH-46 | 7 | **CONFIRMED** | browser-verified: banner, king-square highlight, and c1b3+ in the moves table | `2064f92` |
+| 63 | TH-47 | 7 | **CONFIRMED** | hardcoded type kept as the safer choice; .svg suffix now required, so it is provably correct | `2064f92` |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1753,3 +1753,65 @@ otherwise have. So the type stays hardcoded and what was missing is added
 instead -- the route now requires a `.svg` suffix, which makes the hardcoded
 type **provably** correct rather than incidentally correct. `/pieces/foo.txt`
 is a 404, and the traversal guard the merge probed exhaustively is untouched.
+
+---
+
+## Campaign reconciliation
+
+```
+backlog in 62  =  confirmed 54 + rejected 4 + closed-pre-measurement 2
+                  + moot 1 + blocked 1
+```
+
+TH-16 appears twice on purpose: its class A (node-identical) form is REJECTED
+and its class B form is KEPT-ON-NULL. It is counted once above, under rejected,
+with the kept form recorded separately.
+
+| tier | items | verdicts |
+|---|---|---|
+| 0 P0 soundness | 1 | 1 confirmed |
+| 1 correctness | 19 | 19 confirmed |
+| 2 doc overclaims | 7 | 6 confirmed, 1 moot |
+| 3 instruments | 18 | 17 confirmed, 1 rejected |
+| 4 NPS | 7 | 5 confirmed, 1 rejected, 1 closed pre-measurement |
+| 5 efficiency | 4 | 2 confirmed, 2 rejected (1 of them kept in its other form) |
+| 6 new ideas | 3 | 1 confirmed, 1 blocked, 1 closed pre-measurement |
+| 7 GUI | 3 | 3 confirmed |
+
+TH-16 was reclassified from tier 4 to tier 5 mid-campaign, on the measurement
+that it is not node-identical, which is why tier 4 shows 7 and tier 5 shows 4.
+
+## Final gate
+
+| gate | result |
+|---|---|
+| `pytest -q` | **110 passed**, 3 deselected (43 at the start) |
+| `pytest -q -m ""` | **112 passed, 1 xfailed** (the df-pn prototype, strict) |
+| `perft(7)` from start | 1,355,253 |
+| regression digest | `811f304f1eef7998`, 6,673,441 nodes |
+| mate in 9 / 13 / 13 | 29991 / 29987 / 29987, default seed **and** `0xC0FFEE` |
+| negative hunts d12-d18, both colours | 0 everywhere |
+| `git status` | clean |
+
+Node counts on the negative hunts at the end of the campaign: d12 171,059 /
+9,700 · d14 1,238,385 / 220,875 · d16 9,697,568 / 1,784,342 · d18 86,755,179 /
+9,135,325 (White / Black).
+
+## Total measured gain
+
+Campaign start (`9a4e930`) to the end of tier 4 (`b4526f3`), same-build control
+arm, 9 repeats, fresh process each:
+
+| workload | control | gain |
+|---|---|---|
+| hunt d16, start | -0.03% | **+22.79%** |
+| solve d14, start | +0.52% | **+21.08%** |
+| perft(7), start | -0.43% | **+42.48%** |
+| perft(4), drop-heavy | +0.13% | **+206.75%** |
+
+Split into its two parts on hunt d16: **+19.1% nodes per second** and **-3.0%
+nodes to depth**, the latter a one-off side effect of THB-01's soundness fix.
+
+Tier 5 added TH-16, which is +8.15% and +22.85% on the two start-position hunts
+but costs 3.04% more nodes on the regression suite; it is not folded into the
+figures above, because those are node-identical and this one is not.

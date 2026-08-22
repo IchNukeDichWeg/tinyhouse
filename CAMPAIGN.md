@@ -10,6 +10,16 @@ Verdicts: `CONFIRMED` · `REJECTED` · `NULL` · `KEPT-ON-NULL` ·
 Measurements and their protocol live in `SCOREBOARD.md`; this file carries one
 line per item.
 
+## Status: COMPLETE
+
+All 62 items closed. Reconciliation, per-tier verdicts, the final gate and the
+total measured gain are in `SCOREBOARD.md`.
+
+```
+backlog in 62 = confirmed 54 + rejected 4 + closed-pre-measurement 2
+                + moot 1 + blocked 1
+```
+
 ## Baseline gate (2026-08-22, at `d8d951f`)
 
 | Gate | Result |
