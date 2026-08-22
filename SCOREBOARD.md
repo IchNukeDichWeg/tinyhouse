@@ -32,26 +32,26 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | # | ID | Tier | Verdict | Metric | Commit |
 |---|---|---|---|---|---|
 | 1 | THB-01 | 0 | **CONFIRMED** | fix costs nothing on the bounds path: start-position negative hunt d16 White 9,913,857 -> 9,616,663 nodes (-3.0%), Black 1,824,606 -> 1,791,866 (-1.8%); repro position d13 8,279,609 -> 8,988,304 (+8.6%) | `8b2e81c` |
-| 2 | THB-02 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
-| 3 | THB-03 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
-| 4 | THB-05 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; whole-suite cost of validating every to_c call is 4.63s -> 4.68s (noise) | see below |
-| 5 | THB-04 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; guard is a no-op on legal input (no king capture is generated from a validated position) | see below |
-| 6 | THB-06 | 1 | **CONFIRMED** | parse-time rejection; perft(7) 1,355,253 unchanged | see below |
-| 7 | TH-21 | 3 | **CONFIRMED** | coverage; suite 59 -> 61 tests, +0.0s | see below |
-| 8 | THB-07 | 1 | **CONFIRMED** | foreign-rule dump: rc 0 -> -3; header 24 -> 32 bytes, so pre-existing dumps are invalidated by design | see below |
-| 9 | THB-08 | 1 | **CONFIRMED** | failed save: silent exit-0 -> WARNING + intact previous dump; perft(7) 1,355,253 unchanged | see below |
-| 10 | THB-10 | 1 | **CONFIRMED** | depth 0 and -5 now clamp to 1; repo DB had 0 rows to clean (4 rows, depths 8/14) | see below |
-| 11 | THB-09 | 1 | **CONFIRMED** | unproven rows no longer stored; build_book 8 1 keeps 0 of 7 visited (nothing that shallow is proven) | see below |
-| 12 | TH-41 | 1 | **CONFIRMED** | labelling only; no engine or node-count effect | see below |
-| 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | see below |
-| 14 | TH-40 | 1 | **CONFIRMED** | mirrored pair now reports snd 2 vs 1 (was 1 vs 1); cache namespace moves automatically via TH-42 | see below |
-| 15 | THB-11 | 1 | **CONFIRMED** | contended trivial request: unbounded wait -> 503 after 20s; GUI depth cap 22 -> 16 on measured cost (d16 10.25s, d18 98.77s cold) | see below |
-| 16 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | see below |
-| 17 | TH-43 | 1 | **CONFIRMED** | node-identical (9,616,663 hunt d16 and 1,319,149 solve d14 on both arms); time x0.993/x1.000, inside spread | see below |
-| 18 | THB-15 | 1 | **CONFIRMED** | flag on: import now raises; divergence Python 6/36/274/2181/19317 vs C 6/33/241/1855/16021 | see below |
-| 19 | THB-14 | 1 | **CONFIRMED** | flags-only edit: dylib unchanged (sha1 4a7c8c7f) -> rebuilt (afeba22c -> 9d16118d) | see below |
-| 20 | THB-12 | 1 | **CONFIRMED** | browser-verified: two unawaited clicks record 1 move, not 2 (guard removed: 2 moves, wrong position) | see below |
-| 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | see below |
+| 2 | THB-02 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | `ee9a07a` |
+| 3 | THB-03 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | `fe7d586` |
+| 4 | THB-05 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; whole-suite cost of validating every to_c call is 4.63s -> 4.68s (noise) | `6e2fa60` |
+| 5 | THB-04 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; guard is a no-op on legal input (no king capture is generated from a validated position) | `4182411` |
+| 6 | THB-06 | 1 | **CONFIRMED** | parse-time rejection; perft(7) 1,355,253 unchanged | `61709fd` |
+| 7 | TH-21 | 3 | **CONFIRMED** | coverage; suite 59 -> 61 tests, +0.0s | `1e17566` |
+| 8 | THB-07 | 1 | **CONFIRMED** | foreign-rule dump: rc 0 -> -3; header 24 -> 32 bytes, so pre-existing dumps are invalidated by design | `cb6a56d` |
+| 9 | THB-08 | 1 | **CONFIRMED** | failed save: silent exit-0 -> WARNING + intact previous dump; perft(7) 1,355,253 unchanged | `33ed079` |
+| 10 | THB-10 | 1 | **CONFIRMED** | depth 0 and -5 now clamp to 1; repo DB had 0 rows to clean (4 rows, depths 8/14) | `e937cc7` |
+| 11 | THB-09 | 1 | **CONFIRMED** | unproven rows no longer stored; build_book 8 1 keeps 0 of 7 visited (nothing that shallow is proven) | `a7f89c8` |
+| 12 | TH-41 | 1 | **CONFIRMED** | labelling only; no engine or node-count effect | `d995bb2` |
+| 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | `f128cf0` |
+| 14 | TH-40 | 1 | **CONFIRMED** | mirrored pair now reports snd 2 vs 1 (was 1 vs 1); cache namespace moves automatically via TH-42 | `5c9e9af` |
+| 15 | THB-11 | 1 | **CONFIRMED** | contended trivial request: unbounded wait -> 503 after 20s; GUI depth cap 22 -> 16 on measured cost (d16 10.25s, d18 98.77s cold) | `b20476c` |
+| 16 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | `7c2f5cd` |
+| 17 | TH-43 | 1 | **CONFIRMED** | node-identical (9,616,663 hunt d16 and 1,319,149 solve d14 on both arms); time x0.993/x1.000, inside spread | `a784459` |
+| 18 | THB-15 | 1 | **CONFIRMED** | flag on: import now raises; divergence Python 6/36/274/2181/19317 vs C 6/33/241/1855/16021 | `2a4e605` |
+| 19 | THB-14 | 1 | **CONFIRMED** | flags-only edit: dylib unchanged (sha1 4a7c8c7f) -> rebuilt (afeba22c -> 9d16118d) | `125e934` |
+| 20 | THB-12 | 1 | **CONFIRMED** | browser-verified: two unawaited clicks record 1 move, not 2 (guard removed: 2 moves, wrong position) | `72f1344` |
+| 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | `72f1344` |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -507,6 +507,39 @@ captured promoted piece returns to hand as a **pawn**, so the flag decides which
 game is analysed. From `K3/4/2k1/2F~1[-] b`, `c2c1` yields `...[p] w`; without
 the marker the same move yields `...[f] w`.
 
+Landed in `72f1344`, the THB-12 commit, rather than in one of its own -- both
+edits touch `index.html` and I committed them together. That is one logical
+change too many for a commit and is recorded here rather than repaired with
+a revert-and-reapply pair that would leave the same history.
+
 Verified in the running GUI: the palette now offers 17 entries, the six
 promoted ones rendering a `~`, and selecting `F~` then clicking c1 builds
 `fuwk/3p/P3/KWF~F[-] w` -- previously impossible to express at all.
+
+---
+
+## Tier 1 closing gate
+
+Whole batch re-verified at `72f1344`, after all 19 items:
+
+| gate | result |
+|---|---|
+| `pytest -q` | **80 passed** (43 at the campaign's start) |
+| `perft(7)` from start | 1,355,253 |
+| Python/C parity walk | green |
+| mate in 9 / 13 / 13 | 29991 / 29987 / 29987, default seed **and** `0xC0FFEE` |
+| negative hunts d12/14/16, both colours | 0 everywhere |
+
+**The whole tier is node-identical on the search path.** The d12/14/16 counts
+below are byte-for-byte the ones recorded immediately after THB-01 landed, so
+none of the nineteen correctness fixes moved a single node:
+
+| depth | White | Black |
+|---|---|---|
+| 12 | 172,052 | 9,717 |
+| 14 | 1,244,163 | 222,736 |
+| 16 | 9,616,663 | 1,791,866 |
+
+That matters for the tiers that follow: this is the baseline tiers 4 and 5 will
+be measured against, and it is unchanged from the one taken at the top of the
+campaign.
