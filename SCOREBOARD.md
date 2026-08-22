@@ -76,14 +76,14 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | `a064fd6` |
 | 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | `d0e1350` |
 | 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | `94ea4f2` |
-| 46 | TH-08 | 4 | **CONFIRMED** | +4.04% solve d14, +3.69/+3.93% hunt d16 vs a 0.2-0.4% control; NULL on drop-heavy; node-identical | see below |
-| 47 | TH-09 | 4 | **CONFIRMED** | +5.24% solve d14, +5.56/+5.15% hunt d16, +6.06% drop-heavy vs 0.0-0.8% controls; perft +1.00% (reported 1.071x); node-identical | see below |
-| 48 | TH-10 | 4 | **CONFIRMED** | +7.92% solve d14, +7.44/+7.47% hunt d16, +3.78% drop-heavy, perft +0.34% (no regression); KEY_PARANOIA clean over 123M nodes incl. SMP | see below |
-| 49 | TH-12 | 4 | **CONFIRMED** | +10.16% perft(7), +39.56% drop-heavy perft, +2.53% solve d14, +2.95% hunt d16 vs controls under 0.4%; node-identical | see below |
-| 50 | TH-11 | 4 | **CONFIRMED** | perft +28.46% start, +110.83% drop-heavy; inside search -0.78%/-0.68% so shipped OFF there; perft equivalence checked on 8 positions incl. 3 promoted-mao | see below |
-| 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | see below |
-| 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | see below |
-| 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | see below |
+| 46 | TH-08 | 4 | **CONFIRMED** | +4.04% solve d14, +3.69/+3.93% hunt d16 vs a 0.2-0.4% control; NULL on drop-heavy; node-identical | `51a3442` |
+| 47 | TH-09 | 4 | **CONFIRMED** | +5.24% solve d14, +5.56/+5.15% hunt d16, +6.06% drop-heavy vs 0.0-0.8% controls; perft +1.00% (reported 1.071x); node-identical | `d6cf665` |
+| 48 | TH-10 | 4 | **CONFIRMED** | +7.92% solve d14, +7.44/+7.47% hunt d16, +3.78% drop-heavy, perft +0.34% (no regression); KEY_PARANOIA clean over 123M nodes incl. SMP | `28940f1` |
+| 49 | TH-12 | 4 | **CONFIRMED** | +10.16% perft(7), +39.56% drop-heavy perft, +2.53% solve d14, +2.95% hunt d16 vs controls under 0.4%; node-identical | `bcdb61a` |
+| 50 | TH-11 | 4 | **CONFIRMED** | perft +28.46% start, +110.83% drop-heavy; inside search -0.78%/-0.68% so shipped OFF there; perft equivalence checked on 8 positions incl. 3 promoted-mao | `44fce7b` |
+| 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | `290c749` |
+| 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | `2556151` |
+| 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | `b4526f3` |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1388,3 +1388,44 @@ already showed leaks cost into perft and `th_moves` -- or threaded through the
 search, and the item's own verdict is PLAUSIBLE, UNMEASURED, high effort, and
 **not node-identical**. Rejected with the profile kept, so a future attempt
 starts from the ceiling rather than from a guess.
+
+---
+
+## Tier 4 closing gate and cumulative measurement
+
+Gate at `b4526f3`: 106 fast tests + 2 slow, `perft(7) = 1,355,253`, regression
+digest `651da0519b02a4b7` unchanged, all three published proofs at their exact
+distances, tree clean.
+
+**Campaign start (`9a4e930`) to now**, same-build control arm in the same
+interleaved session, 9 repeats, fresh process each:
+
+| workload | control | tier-4 start | **now** |
+|---|---|---|---|
+| hunt d16, start | -0.03% | +2.32% | **+22.79%** |
+| solve d14, start | +0.52% | -0.21% | **+21.08%** |
+| perft(7), start | -0.43% | -0.38% | **+42.48%** |
+| perft(4), drop-heavy | +0.13% | -0.85% | **+206.75%** |
+
+Tiers 0-3 moved speed by nothing measurable, which is what they were for. All
+of tier 4 is node-identical, so its whole contribution is time per node.
+
+**Separating the two effects on hunt d16**, because they are different claims:
+node counts fell **9,913,857 -> 9,616,663 (-3.0%)**, and that happened once, at
+THB-01, the P0 soundness fix -- not in tier 4. So the honest split is
+
+- **nodes per second: +19.1%** (`1.2279 / (9913857/9616663)`)
+- **nodes to depth: -3.0%**, a side effect of restoring the ply-budget contract
+
+and the wall-clock figure of +22.79% is the two together.
+
+### Why the tier stopped where it did
+
+The campaign's stop condition -- three consecutive non-wins in a performance
+tier -- fired on TH-16, TH-15 and TH-14, and it coincides with the tier being
+exhausted. Its diagnosis is "either the backlog's estimates are systematically
+wrong or your instrument is lying". **The instrument is not lying**: the control
+arm measured 0.03-0.52% in the same sessions, and five items in the same tier
+measured clean, repeatable wins. The estimates are the part that was off, in
+both directions -- TH-08 came in at a third of its claim and TH-10 above its
+claim, while TH-16's and TH-14's cheap forms are net losses.
