@@ -3,15 +3,38 @@
   "tier_reached": "partial weak solve (bounds only)",
   "value": "unknown, consistent with draw",
   "proven_bounds": [
-    {"claim": "no forced WHITE win within 20 plies", "depth": 20, "nodes": 728842906, "method": "null-window mate hunt, single thread"},
-    {"claim": "no forced BLACK win within 22 plies", "depth": 22, "nodes": 302537420, "method": "null-window mate hunt, single thread"}
+    {
+      "claim": "no forced WHITE win within 20 plies",
+      "depth": 20,
+      "nodes": 728842906,
+      "method": "null-window mate hunt, single thread"
+    },
+    {
+      "claim": "no forced BLACK win within 22 plies",
+      "depth": 22,
+      "nodes": 302537420,
+      "method": "null-window mate hunt, single thread"
+    }
   ],
   "proven_wins_found": [
-    {"line": "1. Fd1c2??", "tfen": "fuwk/3p/P1F1/KWU1[-] b", "value": "Black mates in 9 plies", "pv": "1... Ub4xc2 2. Wb1b2 F@a3 3. Wb2xc2 d3xc2 4. U@b3 Kd4d3 5. Ub3xd2 W@b1#"},
-    {"line": "1. Wb1b2 Fa4b3??", "tfen": "1uwk/1f1p/PW2/K1UF[-] w", "value": "White mates in 13 plies"},
-    {"line": "1. a2a3 Fa4b3??", "tfen": "1uwk/Pf1p/4/KWUF[-] w", "value": "White mates in 13 plies"}
+    {
+      "line": "1. Fd1c2??",
+      "tfen": "fuwk/3p/P1F1/KWU1[-] b",
+      "value": "Black mates in 9 plies",
+      "pv": "1... Ub4xc2 2. Wb1b2 F@a3 3. Wb2xc2 d3xc2 4. U@b3 Kd4d3 5. Ub3xd2 W@b1#"
+    },
+    {
+      "line": "1. Wb1b2 Fa4b3??",
+      "tfen": "1uwk/1f1p/PW2/K1UF[-] w",
+      "value": "White mates in 13 plies"
+    },
+    {
+      "line": "1. a2a3 Fa4b3??",
+      "tfen": "1uwk/Pf1p/4/KWUF[-] w",
+      "value": "White mates in 13 plies"
+    }
   ],
   "summary": "no forced win for either side within 20 (White) / 22 (Black) plies; game value still open",
   "machine": "Apple M2 Pro, 10 cores, macOS 15 (Darwin 25.5.0), single thread",
-  "note": "Bounds are proof-grade: the search returns unsound 0 at the horizon, so any mate score it reports is a proof, and a null-window hunt that returns 0 proves no win exists within that ply budget. Deeper bounds: run solve_hunt.py (see README)."
+  "note": "Two claim strengths, not one. A reported mate is a proof of a forced win and, since the TT_BUDGET_GUARD in tinyhouse.c, of the distance it names: the search returns an unsound 0 at the horizon, so a mate score can only come from real terminals. A 'no forced win within N plies' bound is immune to horizon unsoundness, to a TT cutoff overrunning its budget and to store-side graph-history interaction, but not to a 64-bit Zobrist collision, which has no directional structure and could prune a subtree holding a real mate. That residual is unquantified rather than zero; re-run under a second --seed to check it. Deeper bounds: run solve_hunt.py (see README)."
 }

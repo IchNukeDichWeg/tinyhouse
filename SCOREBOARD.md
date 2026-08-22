@@ -53,6 +53,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 20 | THB-12 | 1 | **CONFIRMED** | browser-verified: two unawaited clicks record 1 move, not 2 (guard removed: 2 moves, wrong position) | `72f1344` |
 | 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | `72f1344` |
 | 22 | TH-01 | 2 | **CONFIRMED** | docs only; the claim is true after THB-01 but its stated reason never was | see below |
+| 23 | TH-02 | 2 | **CONFIRMED** | docs only; 4 sites, no code path touched (perft(7) 1,355,253, suite 80) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -555,3 +556,27 @@ extensions would not have helped. So the correction is not the backlog's
 "a reported mate distance may exceed d" (which describes the pre-fix engine and
 would now be false); it is to name both of the things that make the budget
 exact, so that deleting either one is visibly a contract change.
+
+### TH-02 · one proof grade sold for two claim strengths
+
+All four sites the merge counted were verified still present and all four are
+edited: `README.md`, `solve_status.json` (whose `note` restated the grade and
+whose key names, `proven_bounds` and `proven_wins_found`, use one word for
+both), the `th_mate_hunt` comment in `tinyhouse.c`, and `fmtVal` in
+`index.html`.
+
+The wording now separates three grades, and the separation had to be corrected
+in **both** directions the backlog names:
+
+- a reported mate is a proof of the win **and**, since `TT_BUDGET_GUARD`, of
+  the distance -- "exposed to the TT-extension defect" would overstate it, the
+  defect made "within N plies" false, never the proof itself;
+- a negative bound is **not** unconditional either: immune to horizon
+  unsoundness, to a cutoff overrunning its budget and to store-side GHI, but
+  carrying the Zobrist-collision residual (TH-06), which is unquantified rather
+  than zero;
+- `snd === 3` is an exact *game* value, not the "exact at this depth" the GUI
+  claimed -- that one was a mis-claim, not an over-claim.
+
+Key names in `solve_status.json` are left alone on purpose: they are the
+machine-readable contract the GUI reads, and the note now says what they mean.

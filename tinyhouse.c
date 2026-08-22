@@ -661,9 +661,14 @@ int th_search(THPos *p, int depth, uint16_t *bestmove) {
     return th_solve(p, depth, bestmove, 0);
 }
 
-/* Null-window mate hunt: proves/disproves "the given color forces a win
- * within depth plies". Returns the value from that color's perspective;
- * > MATE_BOUND is a proof. */
+/* Null-window mate hunt: proves/disproves "the given color forces a win within
+ * depth plies". Returns the value from that color's perspective.
+ * > MATE_BOUND is a proof of a forced win, and (since TT_BUDGET_GUARD) of the
+ * distance it reports. A return of 0 is a proof of the negative: no forced win
+ * exists within that many plies. Both are proofs relative to the Zobrist
+ * keying - a 64-bit collision has no directional structure and could prune a
+ * subtree holding a real mate, so a second seed is the check on both, not just
+ * on the wins. */
 int th_mate_hunt_mt(THPos *p, int depth, int color, int workers, uint16_t *bestmove) {
     if (p->stm == color)
         return root_search(p, depth, MATE_BOUND, MATE, workers, bestmove, 0);

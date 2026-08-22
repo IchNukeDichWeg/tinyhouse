@@ -114,10 +114,14 @@ let state = { tfen: START, info: null, sel: null, handSel: null,
 const $ = id => document.getElementById(id);
 const sqName = i => FILES[i % 4] + (Math.floor(i / 4) + 1);
 
+// Three distinct grades, deliberately worded apart: a mate is a proof of the
+// win AND of its distance; snd === 3 is a proven exact game value (not a
+// depth-limited one); anything else is only "nothing found inside this
+// horizon". All are relative to the Zobrist keying - see README.
 function fmtVal(v, snd) {
-  if (v > 29000) return {t: `White wins in ${30000 - v}`, s: "forced (proven)"};
-  if (v < -29000) return {t: `Black wins in ${30000 + v}`, s: "forced (proven)"};
-  const proven = snd === 3 ? "exact at this depth" : "no forced win within horizon";
+  if (v > 29000) return {t: `White wins in ${30000 - v}`, s: "forced win, proven at this distance"};
+  if (v < -29000) return {t: `Black wins in ${30000 + v}`, s: "forced win, proven at this distance"};
+  const proven = snd === 3 ? "exact game value (proven)" : "no forced win within this horizon";
   return {t: v === 0 ? "0.00" : (v > 0 ? "+" : "") + v, s: proven};
 }
 

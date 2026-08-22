@@ -70,7 +70,7 @@ line per item.
 | ID | Item | Status |
 |---|---|---|
 | TH-01 | "no search extensions, so the ply budget is exact" is false | **CONFIRMED** |
-| TH-02 | one proof grade sold for two claim strengths | PENDING |
+| TH-02 | one proof grade sold for two claim strengths | **CONFIRMED** |
 | TH-05 | `solve_status.json` says "single thread"; the tool defaults to 2 | PENDING |
 | TH-03 | rep-safety "keeps the GHI problem out" overclaims | PENDING |
 | TH-06 | the negative bounds need the second-seed re-verification too | PENDING |

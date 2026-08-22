@@ -56,6 +56,16 @@ horizon and sound values only at terminals and repetitions, so a mate score it r
 is a proof, and a null-window hunt returning 0 proves no win exists within that budget.
 See the solver comment block in `tinyhouse.c`.
 
+**The two claims are not equally strong, and the difference is worth stating.** A
+reported mate is a proof of a forced win *and*, since the ply-budget guard, of the
+distance it names. A "no forced win within N plies" bound is immune to horizon
+unsoundness, to a transposition-table cutoff overrunning its budget, and to
+store-side graph-history interaction — but not to a 64-bit Zobrist collision, which
+has no directional structure and could prune a subtree holding a real mate. That
+residual is unquantified rather than zero, and re-running under a second seed
+(`--seed`) is the cheap check against it, for the negative bounds as much as for the
+wins.
+
 ### Pushing the bounds deeper
 
 `solve_hunt.py` prints live nodes/nps/elapsed with a per-depth ETA and one summary
