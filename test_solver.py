@@ -653,3 +653,22 @@ def test_reachable_census_low_plies():
     assert r.returncode == 0, r.stderr
     assert "MISMATCH" not in r.stdout
     assert "55,183" in r.stdout
+
+
+@pytest.mark.slow
+@pytest.mark.xfail(reason="TH-36: the df-pn prototype does not solve its validation "
+                          "case yet; the gating milestone is BLOCKED on this passing",
+                   strict=True)
+def test_dfpn_prototype_proves_the_recorded_mate():
+    """The validation case for scripts/dfpn.py, wired up and expected to fail.
+
+    Marked xfail(strict) rather than deleted or skipped: it fails today, it
+    states exactly what "working" means, and if someone fixes the prototype the
+    suite will tell them by failing the other way.
+    """
+    sys.path.insert(0, str(DIR / "scripts"))
+    import dfpn
+
+    d = dfpn.DFPN(attacker=T.BLACK, node_cap=1_000_000)
+    pn, dn = d.run(T.Position.from_tfen("fuwk/3p/P1F1/KWU1[-] b"))
+    assert pn == 0, f"expected a proof; got pn={pn} dn={dn} after {d.nodes:,} nodes"

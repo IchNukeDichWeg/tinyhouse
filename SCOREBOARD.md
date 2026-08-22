@@ -89,6 +89,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 56 | TH-17 | 5 | **REJECTED** | regression suite -11.21% at weight 512, but the deep hunts go +13.12/+15.17/+19.33% at d14/16/18 and +70.02% on the Black d18 hunt | see below |
 | 57 | TH-39 | 5 | **CONFIRMED** | node-optimal size moves with depth (2^20 at d16, 2^24 at d18); 2^26 is 14.9% full at d18, so the default is kept for the depth-20+ runs it exists for | see below |
 | 58 | TH-37 | 6 | **CONFIRMED** | plies 1-8 reproduced exactly and independently (2,036,092 cumulative, no hashing); growth ~6/ply bending to 5.09 by ply 10 | see below |
+| 59 | TH-36 | 6 | **BLOCKED** | prototype returns a wrong DISPROVED on the recorded mate in 9, so none of its diagnostics can be trusted; shipped as groundwork with a strict xfail | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1626,3 +1627,44 @@ verdict in `RULES.md` is a measurement rather than an argument. Growth sits near
 6 per ply and begins to bend by ply 10 (5.09), so the reachable space is far
 smaller than the 1.77e13 the notation can express -- and still far too large for
 a retrograde table.
+
+### TH-36 · df-pn as a second engine — BLOCKED
+
+A df-pn prototype is written and committed (`scripts/dfpn.py`), and it **fails
+its validation case**, so the gating milestone cannot be read off it.
+
+Validation case: the recorded mate in 9 on `fuwk/3p/P1F1/KWU1[-] b`, which the
+alpha-beta engine proves at depth 9 under two Zobrist seeds and which the
+campaign has pinned as a test since tier 0.
+
+| configuration | result | nodes | tt |
+|---|---|---|---|
+| depth-limited to 9, sound store | still open | 1,000,001 | 71 |
+| depth-limited to 9, store anyway | still open | 1,000,001 | 416 |
+| unbounded, sound store | still open | 1,000,001 | 15 |
+| unbounded, store anyway | **DISPROVED** (wrong) | 858 | 746 |
+
+The last row is the one that settles it: it returns a confident disproof of a
+position with an independently verified proof, so **nothing this prototype
+reports can be trusted**, including its diagnostics.
+
+**What I will not claim.** With the sound store rule, 99.99% of values are
+withheld as path-dependent and the table freezes at 15-71 entries over a million
+nodes -- which is exactly what the backlog predicted ("essentially every value
+becomes path-dependent and unstorable under the conservative rule") and would be
+a strong argument for Kishimoto-Muller twin entries. **It is not claimed here**,
+because a defect in this implementation would produce the same symptom, and I
+did not separate the two. Reporting the number as a finding would be reporting
+my own bug as a property of the algorithm.
+
+**Verdict BLOCKED**, with the blocker named precisely: the milestone needs an
+implementation that proves the mate in 9, and this one does not. The prototype
+ships as groundwork with the validation case wired up as a **strict xfail** --
+it fails today, it states exactly what "working" means, and if someone fixes it
+the suite says so by failing the other way.
+
+The item's premise is untouched by any of this. The alpha-beta engine's horizon
+returns an unsound 0, so a draw is the absence of a proof; the campaign did
+prove one for bare kings at depth 80-100 (TH-29), and nothing like it is
+reachable for the start position. A horizon-free search is still the only
+formulation that can close the draw claim.
