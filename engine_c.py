@@ -21,6 +21,20 @@ _LIB = _DIR / "libtinyhouse.dylib"
 # seed, and used to load with rc = 0.
 _BUILD_ID = int.from_bytes(hashlib.sha1(_SRC.read_bytes()).digest()[:8], "little")
 
+# THB-15: tinyhouse.py's DOUBLE_STEP toggle has no counterpart in tinyhouse.c,
+# and the C engine is the one that searches. With the flag on, Python gives
+# perft(1..5) = 6/36/274/2181/19317 and C gives 6/33/241/1855/16021 -- they are
+# different games from ply 2. The sharp hazard is that server.py drives BOTH in
+# one process: position_info enumerates the GUI's legal moves from the Python
+# generator while analyze evaluates with C, so the GUI would offer a2a4=W and
+# then hand back an evaluation from an engine that has no such move. A raise,
+# not an assert, because asserts vanish under -O.
+if T.DOUBLE_STEP:
+    raise RuntimeError(
+        "tinyhouse.DOUBLE_STEP is on but tinyhouse.c does not implement it. The "
+        "two engines would search different games (perft(2): 36 vs 33); mirror "
+        "the rule in pseudo_moves() before enabling it.")
+
 if not _LIB.exists() or _LIB.stat().st_mtime < _SRC.stat().st_mtime:
     subprocess.run(["cc", "-O2", "-pthread", "-shared", f"-DTH_BUILD_ID={_BUILD_ID}ULL",
                     "-o", str(_LIB), str(_SRC)], check=True)

@@ -48,6 +48,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 15 | THB-11 | 1 | **CONFIRMED** | contended trivial request: unbounded wait -> 503 after 20s; GUI depth cap 22 -> 16 on measured cost (d16 10.25s, d18 98.77s cold) | see below |
 | 16 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | see below |
 | 17 | TH-43 | 1 | **CONFIRMED** | node-identical (9,616,663 hunt d16 and 1,319,149 solve d14 on both arms); time x0.993/x1.000, inside spread | see below |
+| 18 | THB-15 | 1 | **CONFIRMED** | flag on: import now raises; divergence Python 6/36/274/2181/19317 vs C 6/33/241/1855/16021 | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -435,3 +436,21 @@ interleaved, tt 2^22, first repeat discarded):
 |---|---|---|---|---|
 | hunt d16 White, start | 9,616,663 | 9,616,663 | yes | x0.993 (spread 2.1-3.9%) |
 | solve d14, start | 1,319,149 | 1,319,149 | yes | x1.000 (spread 0.2%) |
+
+### THB-15 · `DOUBLE_STEP` has no C counterpart
+
+Divergence re-measured on this build: Python with the flag on gives
+`perft(1..5) = 6/36/274/2181/19317`, C gives `6/33/241/1855/16021`. Different
+games from ply 2.
+
+The backlog's downgrade is confirmed: **"no test can catch a flip" is false.**
+The constant is module level, so flipping it is global at import and the suite
+goes red. That is not the exposure.
+
+The exposure is the one verification found and no report filed: `server.py`
+drives **both** engines in one process. `position_info` enumerates the GUI's
+legal move list from the *Python* generator while `analyze` evaluates with the
+*C* engine, so a flipped toggle would offer `a2a4=W` in the UI and then return
+an evaluation from an engine whose ruleset has no such move. The guard is
+therefore in `engine_c.py`, at the point where the C engine is loaded, and it
+raises rather than asserts because asserts vanish under `-O`.

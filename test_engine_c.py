@@ -98,3 +98,24 @@ def test_king_capture_does_not_write_past_the_hand_array():
     w.stm = 0
     engine_c.lib.th_make(w, T.mv(0, 1))
     assert [w.hands[1][t] for t in range(4)] == [0, 0, 0, 0]
+
+
+def test_importing_the_c_engine_refuses_a_double_step_ruleset():
+    """THB-15: DOUBLE_STEP has no C counterpart, and C is what searches.
+
+    The suite already goes red on a flip, since the constant is module level --
+    the backlog's "no test can catch it" is false. What no test covered is that
+    server.py drives both engines in one process: position_info enumerates the
+    GUI's legal moves from the Python generator while analyze evaluates with C,
+    so the GUI would offer a2a4=W and hand back an evaluation from an engine
+    with no such move.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    r = subprocess.run(
+        [sys.executable, "-c", "import tinyhouse as T; T.DOUBLE_STEP = True; import engine_c"],
+        cwd=Path(__file__).parent, capture_output=True, text=True)
+    assert r.returncode != 0
+    assert "DOUBLE_STEP" in r.stderr and "36 vs 33" in r.stderr
