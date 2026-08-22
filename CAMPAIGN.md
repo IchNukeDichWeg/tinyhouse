@@ -82,7 +82,7 @@ line per item.
 | ID | Item | Status |
 |---|---|---|
 | TH-19 | clear `history` at the root (unblocks tiers 4-5) | **CONFIRMED** |
-| TH-18 | pin the recorded proofs | PENDING |
+| TH-18 | pin the recorded proofs | **CONFIRMED** |
 | TH-22 | cffi signature coverage for the search API | PENDING |
 | TH-28 | pin the horizon "non-terminal is UNSOUND" invariant | PENDING |
 | TH-21 | pin the TT save/load round trip and the seed/size refusals | **CONFIRMED** |

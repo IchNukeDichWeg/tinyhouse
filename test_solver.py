@@ -266,3 +266,49 @@ def test_history_carry_over_is_under_the_callers_control():
     clean = repeats(True)
     assert len(set(clean)) == 1, f"th_clear_history did not make repeats identical: {clean}"
     assert clean[0] == dirty[0], "the first repeat is the cold-history sample either way"
+
+
+# The published headline line, from README.md and solve_status.json: 1.Fd1-c2
+# loses by force. From the root that is a mate in 10 -- White's move, then
+# Black's nine.
+START_ROOT_VALUES = {"a1b2": 0, "a2a3": 0, "b1b2": 0, "c1b3": 0, "c1d3": 0, "d1c2": -29990}
+
+
+@pytest.mark.parametrize("depth", [10, 11, 12])
+def test_root_move_values_from_the_start_are_pinned(tt, depth):
+    """TH-18: nothing in the suite touched the solver, so nothing would have
+    noticed the day a published number moved.
+
+    VALUES only, never the node count. The count for this search is not merely
+    drifty: with a table held across repeats it collapses from 95,857 to 6,
+    which would make a node assertion look catastrophically broken when nothing
+    is wrong. It IS reproducible with a fresh table in a fresh process, so a
+    node pin is possible -- but only with that precondition documented, and
+    TH-20 is where it belongs.
+    """
+    got = _root_values(tt, depth)
+    assert got == START_ROOT_VALUES
+
+
+@pytest.mark.parametrize("seed", [0xC0FFEE, 1, 0xDEADBEEF])
+def test_root_move_values_survive_a_reseed(tt, seed):
+    """Under an independent Zobrist seed the two runs' collision sets are
+    independent, so agreement is the cheap check against a key collision having
+    faked the result. The fixture restores the default seed afterwards."""
+    tt.lib.th_seed(seed)
+    tt.lib.th_tt_init(22)
+    assert _root_values(tt, 10) == START_ROOT_VALUES
+
+
+@pytest.mark.parametrize("bits", [0, 8, 24])
+def test_root_move_values_survive_any_table_size(tt, bits):
+    """Including 2^0, which is one entry -- effectively no table at all."""
+    tt.lib.th_tt_init(bits)
+    assert _root_values(tt, 10) == START_ROOT_VALUES
+
+
+def _root_values(E, depth):
+    E.lib.th_clear_history()
+    mvs, vals = E.ffi.new("uint16_t[128]"), E.ffi.new("int[128]")
+    n = E.lib.th_root_moves(E.to_c(T.Position.start()), depth, mvs, vals)
+    return {T.move_str(mvs[i]): vals[i] for i in range(n)}

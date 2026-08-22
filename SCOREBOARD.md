@@ -60,6 +60,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | `d298404` |
 | 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | `713e188` |
 | 29 | TH-19 | 3 | **CONFIRMED** | in-process repeats 757,431/839,298/845,107/1,345,672/795,066 -> 757,431 x5 with th_clear_history; bench_workers prints 757,431 not '1M' | see below |
+| 30 | TH-18 | 3 | **CONFIRMED** | 9 pinned cases green; sensitivity measured: values catch 0 of 5 planted mutations, node counts catch 4 of 5 | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -731,3 +732,38 @@ The damage was **between** arms, not within them: the script loops worker
 counts in the outer position, so the first count was the only arm ever holding
 a cold-history sample, and helper threads are always cold. The bias sat in
 precisely the comparison the script exists to make.
+
+### TH-18 · pin the recorded proofs
+
+The invariant holds on the current engine and is as robust as the merge found:
+`th_root_moves(start, d)` gives `d1c2 = -29990` with the other five root moves
+0, across **depths 10/11/12, five Zobrist seeds, and table sizes 2^0 through
+2^24** (2^0 being one entry, effectively no table). Nine parametrised cases,
+all green.
+
+**But the backlog calls this "the highest-value instrument in the backlog", and
+that is measured to be wrong.** Five mutations planted in `search()`, each
+built and run against this exact pin:
+
+| planted mutation | values | node count |
+|---|---|---|
+| TT mate-score ply re-basing removed | miss | **catch** (99,143 vs 95,783) |
+| root killers not reset | miss | miss |
+| mate-distance pruning clamp removed | miss | **catch** (106,568) |
+| history update removed | miss | **catch** (98,562) |
+| rep-safety store gate removed | miss | **catch** (95,781) |
+
+**Values catch 0 of 5. Node counts catch 4 of 5.** The stability that makes
+this a good pin for a *published number* is exactly what makes it a poor
+*regression detector*: it is a proof, and a proof is robust to almost any
+change that does not break soundness outright.
+
+So the value assertion stays -- it is the right guard for the headline claim,
+and the backlog's warning against asserting the node count here is well taken,
+since a warm table collapses it from ~95,783 to 6. But the regression detector
+is TH-20's node field, not this. That reorders the tier: TH-20 is the
+high-value instrument, and this is the record-keeping one.
+
+(The killers mutation is invisible to both because `th_root_moves` calls
+`search()` directly and never goes through `root_search`, where the reset
+lives. A real coverage gap, recorded rather than papered over.)
