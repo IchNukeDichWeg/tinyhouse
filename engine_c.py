@@ -42,7 +42,18 @@ lib = ffi.dlopen(str(_LIB))
 lib.th_init()
 
 
+# to_c is the real Python->C trust boundary. The C engine indexes hands[] and
+# its neighbour tables straight off these values, so an unvalidated Position
+# reads out of bounds and the search hands back a fabricated mate carrying the
+# soundness flags that mean "proven". Every guard used to live in from_tfen,
+# which a hand-built Position bypasses. Set False only to measure what the
+# check costs; it is not a performance knob otherwise.
+VALIDATE_TO_C = True
+
+
 def to_c(pos: T.Position):
+    if VALIDATE_TO_C:
+        pos.validate()
     c = ffi.new("THPos *")
     for i, pc in enumerate(pos.board):
         c.board[i] = pc

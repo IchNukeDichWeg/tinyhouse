@@ -34,6 +34,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 1 | THB-01 | 0 | **CONFIRMED** | fix costs nothing on the bounds path: start-position negative hunt d16 White 9,913,857 -> 9,616,663 nodes (-3.0%), Black 1,824,606 -> 1,791,866 (-1.8%); repro position d13 8,279,609 -> 8,988,304 (+8.6%) | `8b2e81c` |
 | 2 | THB-02 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
 | 3 | THB-03 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
+| 4 | THB-05 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; whole-suite cost of validating every to_c call is 4.63s -> 4.68s (noise) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -107,3 +108,27 @@ rank the pawn is frozen (promotion is forced, so it generates no moves), while
 on the far rank it plays on normally and is merely unreachable.
 
 perft(7) unchanged at 1,355,253; all five `PERFT_ORACLE` round-trips green.
+
+### THB-05 · `to_c` validated nothing
+
+Reproduced red on the shipped build. A hand-built `T.Position()` -- empty board,
+no kings, never through `from_tfen` -- reached `th_solve` and returned
+**`value=30000, snd=3`** at depths 2, 4 and 6. `snd == SND_LB|SND_UB` is the
+code's own encoding of an exact, PROVEN game value, and 30000 is `MATE` itself,
+a distance-zero mate: a fabricated proof computed off out-of-bounds reads,
+because `king_sq` returns -1 and `attacked()` then indexes `ORTH[-1]`. The
+black-kingless variant returned `29999, snd=1`. An over-full hand is the same
+class: `th_key` indexes `zob_hand[c][t][n]` and that dimension is 3.
+
+The backlog reported `-29998`; this build gives `+30000`. Same defect, and the
+difference is the point -- the item warned the blast radius is build- and
+stack-layout-dependent, so the *value* is not a stable signature.
+
+**Fixed at the root, not at the call site.** The rules moved out of `from_tfen`
+into `Position.validate()`, which both boundaries now call, so `from_tfen` is
+left with syntax only and nothing can drift between the two. That also closes
+THB-04 and THB-06 from every reachable direction, since neither can be reached
+without an illegal position or a fabricated move.
+
+perft(7) unchanged at 1,355,253. Suite cost of validating on every `to_c`
+(~1,200 calls in the parity walk alone): 4.63s -> 4.68s, inside the noise.

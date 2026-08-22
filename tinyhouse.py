@@ -19,6 +19,15 @@ TYPE_CHARS = "PFUWK"
 def piece(color: int, ptype: int, promoted: bool = False) -> int:
     return (ptype + 1) | (promoted << 3) | (color << 4)
 
+# The 16 legal board encodings. Promotion is forced and PromoteTo=FUW, so only
+# F, U and W can carry the promoted bit - and a promoted KING is the dangerous
+# one, since it slips past both guards in validate() (the king count looks for
+# the unpromoted value, the unit-count loop skips K) and smuggles a second king
+# onto the board.
+VALID_PIECES = frozenset(
+    piece(c, t, pr) for c in (WHITE, BLACK) for t in range(5)
+    for pr in (False, True) if not pr or t in (1, 2, 3))
+
 def ptype(pc: int) -> int: return (pc & 7) - 1
 def pcolor(pc: int) -> int: return pc >> 4
 def ppromoted(pc: int) -> bool: return bool(pc & 8)
@@ -130,25 +139,6 @@ class Position:
                     promoted = j + 1 < len(rank) and rank[j + 1] == "~"
                     if promoted:
                         j += 1
-                    # Promotion is forced and PromoteTo=FUW, so a promoted
-                    # piece is always F/U/W. A promoted KING would slip past
-                    # both count guards below - the king count looks for the
-                    # unpromoted value and the unit-count loop skips K - which
-                    # is enough to smuggle a second king onto the board and get
-                    # a soundness-flagged "proof" out of the solver.
-                    if promoted and t not in (F, U, W):
-                        raise ValueError(
-                            f"TFEN marks a {TYPE_CHARS[t]} as promoted; only F, U and W "
-                            f"can be: {tfen!r}")
-                    # No pawn can ever stand on rank 1 or rank 4. On its own
-                    # promotion rank it would be frozen (promotion is forced, so
-                    # pawn_moves is empty); the far rank is simply unreachable,
-                    # since pawns only move forward and the drop rule already
-                    # forbids both back ranks. Same predicate as pseudo_moves.
-                    if t == P and r in (0, 3):
-                        raise ValueError(
-                            f"TFEN puts a pawn on rank {r + 1}; pawns never stand "
-                            f"on rank 1 or 4: {tfen!r}")
                     pos.board[_sq(f, r)] = piece(color, t, promoted)
                     f += 1
                 else:
@@ -162,30 +152,65 @@ class Position:
                     raise ValueError(f"TFEN has bad hand piece {c!r}: {tfen!r}")
                 color = WHITE if c.isupper() else BLACK
                 pos.hands[color][TYPE_CHARS.index(c.upper())] += 1
-        # Each side owns exactly one king, and each of the 4 non-king unit
-        # types exists exactly twice in the game (board + both hands), pawn
-        # origins counted through promotions. th_key packs hand counts as 0-2,
-        # so an over-full hand would read out of bounds in the C engine.
+        try:
+            pos.validate()
+        except ValueError as e:
+            raise ValueError(f"TFEN {e}: {tfen!r}") from None
+        return pos
+
+    # Every structural rule that makes a Position a legal Tinyhouse position,
+    # in ONE place, because it has two trust boundaries and they used to share
+    # nothing. from_tfen is fed raw HTTP input by server.py; engine_c.to_c is
+    # the Python->C boundary, and the C engine indexes hands[] and its
+    # neighbour tables straight off these values. A hand-built Position that
+    # skipped from_tfen used to reach th_solve and come back value=30000
+    # snd=3 - the code's own encoding of an exact, PROVEN game value - computed
+    # off out-of-bounds reads. ValueError rather than assert: asserts vanish
+    # under -O and would let a malformed board through.
+    def validate(self) -> None:
+        if len(self.board) != 16:
+            raise ValueError(f"board has {len(self.board)} squares, need 16")
+        if self.stm not in (WHITE, BLACK):
+            raise ValueError(f"side to move is {self.stm!r}, must be 0 or 1")
+        for s, pc in enumerate(self.board):
+            if not pc:
+                continue
+            if pc not in VALID_PIECES:
+                raise ValueError(f"square {sq_name(s)} holds {pc}, not a piece encoding")
+            # No pawn can ever stand on rank 1 or rank 4. On its own promotion
+            # rank it would be frozen, since promotion is forced and it
+            # generates no moves at all; the far rank is unreachable, because
+            # pawns only move forward and the drop rule forbids both back
+            # ranks. Same predicate as the one in pseudo_moves.
+            if ptype(pc) == P and s >> 2 in (0, 3):
+                raise ValueError(f"has a pawn on rank {(s >> 2) + 1}; "
+                                 f"pawns never stand on rank 1 or 4")
         counts = {t: 0 for t in range(4)}
-        for pc in pos.board:
-            if pc:
-                if ptype(pc) == K:
-                    continue
+        for pc in self.board:
+            if pc and ptype(pc) != K:
                 counts[P if ppromoted(pc) else ptype(pc)] += 1
         for color in (WHITE, BLACK):
-            if pos.board.count(piece(color, K)) != 1:
-                raise ValueError(f"TFEN needs exactly one {'white' if color == WHITE else 'black'} king: {tfen!r}")
+            if self.board.count(piece(color, K)) != 1:
+                raise ValueError(f"needs exactly one {'white' if color == WHITE else 'black'} king")
+            if len(self.hands[color]) != 4:
+                raise ValueError(f"hand has {len(self.hands[color])} counts, need 4")
             for t in range(4):
-                counts[t] += pos.hands[color][t]
+                n = self.hands[color][t]
+                # th_key indexes zob_hand[c][t][n] and that dimension is 3, so
+                # a count outside 0..2 reads out of bounds in the C engine.
+                if not 0 <= n <= 2:
+                    raise ValueError(f"has hand count {n} for {TYPE_CHARS[t]}, must be 0..2")
+                counts[t] += n
+        # Each of the 4 non-king unit types exists at most twice in the game
+        # (board plus both hands), pawn origins counted through promotions.
         for t, n in counts.items():
             if n > 2:
-                raise ValueError(f"TFEN has {n} {TYPE_CHARS[t]} units, max 2: {tfen!r}")
+                raise ValueError(f"has {n} {TYPE_CHARS[t]} units, max 2")
         # The side that just moved may not be left in check. Besides being an
-        # illegal position, it would let pseudo_moves generate a king capture,
-        # and make() would index hands[us][K] out of range.
-        if pos.in_check(1 - pos.stm):
-            raise ValueError(f"TFEN leaves the side not to move in check: {tfen!r}")
-        return pos
+        # illegal position, it lets pseudo_moves generate a king capture, and
+        # make() then indexes hands[us][K], one past the array.
+        if self.in_check(1 - self.stm):
+            raise ValueError("leaves the side not to move in check")
 
     def tfen(self) -> str:
         out = []
