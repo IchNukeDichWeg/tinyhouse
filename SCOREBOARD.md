@@ -52,13 +52,13 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 19 | THB-14 | 1 | **CONFIRMED** | flags-only edit: dylib unchanged (sha1 4a7c8c7f) -> rebuilt (afeba22c -> 9d16118d) | `125e934` |
 | 20 | THB-12 | 1 | **CONFIRMED** | browser-verified: two unawaited clicks record 1 move, not 2 (guard removed: 2 moves, wrong position) | `72f1344` |
 | 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | `72f1344` |
-| 22 | TH-01 | 2 | **CONFIRMED** | docs only; the claim is true after THB-01 but its stated reason never was | see below |
-| 23 | TH-02 | 2 | **CONFIRMED** | docs only; 4 sites, no code path touched (perft(7) 1,355,253, suite 80) | see below |
-| 24 | TH-05 | 2 | **CONFIRMED** | default workers 2 -> 1; node counts now reproducible run to run (467/3,420/23,635 three for three vs 786/807/792 at 2 workers) | see below |
-| 25 | TH-03 | 2 | **CONFIRMED** | PV replay: 9/9 plies legal, 0 repetitions, terminal result -1; perft(7) 1,355,253 unchanged | see below |
-| 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | see below |
-| 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | see below |
-| 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | see below |
+| 22 | TH-01 | 2 | **CONFIRMED** | docs only; the claim is true after THB-01 but its stated reason never was | `eaa9a45` |
+| 23 | TH-02 | 2 | **CONFIRMED** | docs only; 4 sites, no code path touched (perft(7) 1,355,253, suite 80) | `18fb481` |
+| 24 | TH-05 | 2 | **CONFIRMED** | default workers 2 -> 1; node counts now reproducible run to run (467/3,420/23,635 three for three vs 786/807/792 at 2 workers) | `c1d0ac2` |
+| 25 | TH-03 | 2 | **CONFIRMED** | PV replay: 9/9 plies legal, 0 repetitions, terminal result -1; perft(7) 1,355,253 unchanged | `a7a4699` |
+| 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | `080916f` |
+| 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | `d298404` |
+| 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | `713e188` |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
