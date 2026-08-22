@@ -2,6 +2,7 @@
 missing or stale, mirroring Pygin's build-script-plus-runtime-load architecture.
 Positions convert to/from tinyhouse.Position, which stays the source of truth
 for TFEN and rules documentation."""
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -13,8 +14,16 @@ _DIR = Path(__file__).parent
 _SRC = _DIR / "tinyhouse.c"
 _LIB = _DIR / "libtinyhouse.dylib"
 
+# Build fingerprint, compiled in as TH_BUILD_ID and stamped into every .tt
+# dump. Derived from the source rather than hand-maintained, because a format
+# id nobody bumps when editing pseudo_moves protects nothing: a dump written by
+# a build with different RULES has perfectly valid keys under the same Zobrist
+# seed, and used to load with rc = 0.
+_BUILD_ID = int.from_bytes(hashlib.sha1(_SRC.read_bytes()).digest()[:8], "little")
+
 if not _LIB.exists() or _LIB.stat().st_mtime < _SRC.stat().st_mtime:
-    subprocess.run(["cc", "-O2", "-pthread", "-shared", "-o", str(_LIB), str(_SRC)], check=True)
+    subprocess.run(["cc", "-O2", "-pthread", "-shared", f"-DTH_BUILD_ID={_BUILD_ID}ULL",
+                    "-o", str(_LIB), str(_SRC)], check=True)
 
 ffi = cffi.FFI()
 ffi.cdef("""
@@ -26,6 +35,7 @@ void th_make(THPos *p, uint16_t m);
 int th_result(THPos *p);
 uint64_t th_perft(THPos *p, int depth);
 uint64_t th_key(const THPos *p);
+uint64_t th_build_id(void);
 int th_tt_init(int log2_entries);
 void th_seed(uint64_t s);
 int th_tt_save(const char *fname);

@@ -112,19 +112,26 @@ if E.lib.th_tt_init(args.tt) != 0:
     sys.exit(f"could not allocate a 2^{args.tt}-entry table "
              f"({(1 << args.tt) * 16 // 2**20} MiB). Use a smaller --tt.")
 
+# Everything that changes what a completed depth MEANS. `build` is the engine
+# fingerprint: "no forced win through depth 20" is a claim about the code that
+# proved it, so a checkpoint must not be inherited across a source edit.
+IDENT_KEYS = ("tfen", "color", "seed", "tt_bits", "build")
 state = {"tfen": args.tfen, "color": args.color, "seed": args.seed, "tt_bits": args.tt,
+         "build": E.lib.th_build_id(),
          "proven_no_win_through": 0, "result": None, "depths": []}
 if state_path.exists() and not args.fresh:
     loaded = json.loads(state_path.read_text())
-    if all(loaded.get(k) == state[k] for k in ("tfen", "color", "seed", "tt_bits")):
+    differs = [k for k in IDENT_KEYS if loaded.get(k) != state[k]]
+    if not differs:
         state = loaded
         rc = E.lib.th_tt_load(str(tt_path).encode())
         print(f"resumed from {state_path}: no win through depth "
               f"{state['proven_no_win_through']}, "
               + {0: "table reloaded", -1: "no table dump (re-searching)",
-                 -2: "table dump mismatched (ignored)"}[rc])
+                 -2: "table dump size or seed mismatched (ignored)",
+                 -3: "table dump is from a different engine build (ignored)"}[rc])
     else:
-        print(f"checkpoint {state_path} is for a different run; starting fresh")
+        print(f"checkpoint {state_path} differs in {', '.join(differs)}; starting fresh")
 
 pos = E.to_c(T.Position.from_tfen(args.tfen))
 bm = E.ffi.new("uint16_t *")

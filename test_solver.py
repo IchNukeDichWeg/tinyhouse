@@ -7,6 +7,7 @@ one can hide the very defect being pinned: THB-01 reproduces from a cold start
 and disappears if a shallower depth ran first in the same process. `_cold()`
 runs a snippet in a fresh interpreter for exactly that reason.
 """
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -157,3 +158,28 @@ def test_tt_save_and_load_refuse_without_a_table():
 print(E.lib.th_tt_save(b"/dev/null"), E.lib.th_tt_load(b"/dev/null"))
 """)
     assert out == "-1 -1"
+
+
+def test_tt_dump_carries_the_build_that_wrote_it(tt, tmp_path):
+    """THB-07: a dump used to carry no identity of the code that produced it.
+
+    th_key depends only on (board, hands, stm, seed) and every one of those
+    survives a rules change unchanged, so a build in which a ferz moved like a
+    king -- perft(1..4) = 7/43/362/3171 against the stock 6/33/241/1855 --
+    wrote a dump the stock build loaded with rc = 0. The xkey ^ data == key
+    trick validates against corruption, not provenance.
+
+    The header field is edited here rather than compiling a second engine: the
+    end-to-end foreign-rule case is what motivated the field, this pins the
+    mechanism that refuses it.
+    """
+    assert tt.lib.th_build_id() != 0, "built without -DTH_BUILD_ID"
+
+    f = tmp_path / "a.tt"
+    assert tt.lib.th_tt_save(str(f).encode()) == 0
+    raw = bytearray(f.read_bytes())
+    assert struct.unpack_from("<Q", raw, 24)[0] == tt.lib.th_build_id()
+
+    struct.pack_into("<Q", raw, 24, 0xDEADBEEF)
+    (tmp_path / "foreign.tt").write_bytes(raw)
+    assert tt.lib.th_tt_load(str(tmp_path / "foreign.tt").encode()) == -3

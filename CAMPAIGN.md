@@ -45,7 +45,7 @@ line per item.
 
 | ID | Item | Status |
 |---|---|---|
-| THB-07 | `.tt` dump carries no identity of the code that produced it | PENDING |
+| THB-07 | `.tt` dump carries no identity of the code that produced it | **CONFIRMED** |
 | THB-05 | `to_c` is the real trust boundary and validates nothing | **CONFIRMED** |
 | THB-02 | `from_tfen` accepts a promoted king | **CONFIRMED** |
 | THB-03 | `from_tfen` accepts a pawn on rank 1 or 4 | **CONFIRMED** |

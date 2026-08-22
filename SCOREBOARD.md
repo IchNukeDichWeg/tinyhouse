@@ -38,6 +38,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 5 | THB-04 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; guard is a no-op on legal input (no king capture is generated from a validated position) | see below |
 | 6 | THB-06 | 1 | **CONFIRMED** | parse-time rejection; perft(7) 1,355,253 unchanged | see below |
 | 7 | TH-21 | 3 | **CONFIRMED** | coverage; suite 59 -> 61 tests, +0.0s | see below |
+| 8 | THB-07 | 1 | **CONFIRMED** | foreign-rule dump: rc 0 -> -3; header 24 -> 32 bytes, so pre-existing dumps are invalidated by design | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -194,3 +195,26 @@ check deleted returns **0** where the test asserts **-2**.
 The fixture restores `th_seed(0x9E3779B97F4A7C15)` afterwards: reseeding
 rebuilds the Zobrist tables process-wide, so a test that forgets silently
 changes every key for every later test in the run.
+
+### THB-07 · a `.tt` dump carried no identity of the code that wrote it
+
+Reproduced end to end. A scratch build with one genuinely different rule (a
+ferz iterating `KINGN`, so `perft(1..4) = 7/43/362/3171` against the stock
+`6/33/241/1855`) wrote a dump that the **stock** build loaded with **rc = 0**.
+`th_key` depends only on (board, hands, stm, seed), and every one of those
+survives a rules change unchanged, so the keys are perfectly valid -- the
+`xkey ^ data == key` trick validates against corruption, never provenance.
+
+After the fix the same foreign dump returns **-3**. The fingerprint is the sha1
+of `tinyhouse.c` itself, passed as `-DTH_BUILD_ID` by `engine_c.py`. A
+hand-maintained `TT_FORMAT_ID` was rejected on exactly the backlog's ground:
+nobody bumps a format id when editing `pseudo_moves`.
+
+`solve_hunt.py` records the same id in the checkpoint, because "no forced win
+through depth 20" is a claim about the code that proved it. Verified end to
+end: a fresh run proves depths 6 and 8, a second run resumes at depth 10, and
+with the recorded build edited it prints `differs in build; starting fresh`.
+
+**Cost, stated plainly**: every existing `.tt` dump is now unreadable (the
+header grew from 3 words to 4). That is correct rather than unfortunate -- the
+build changed, so the entries are from a different engine either way.

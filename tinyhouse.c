@@ -382,31 +382,49 @@ static inline int tt_cut_ok(int v, int ply, int depth) {
 #endif
 }
 
-/* TT persistence: a multi-hour depth is worth resuming. Entries are
- * self-validating (xkey ^ data == key) and keyed by the Zobrist tables, so a
- * dump is only meaningful under the same seed - the header stores it and the
- * loader refuses a mismatch rather than silently importing garbage keys. */
+/* TT persistence: a multi-hour depth is worth resuming.
+ *
+ * The xkey ^ data == key trick makes an entry self-validating against
+ * CORRUPTION, which says nothing about PROVENANCE: it holds just as well for
+ * an entry a different engine wrote. Two things are therefore stamped in the
+ * header. The Zobrist seed, because keys are meaningless under other tables.
+ * And a build fingerprint (THB-07), because th_key depends only on (board,
+ * hands, stm, seed) and every one of those survives a rules change unchanged -
+ * a build in which a ferz moved like a king (perft(1..4) = 7/43/362/3171
+ * against the stock 6/33/241/1855) wrote a dump that the stock build loaded
+ * with rc = 0 and 3,659 foreign-rule entries. engine_c.py passes
+ * -DTH_BUILD_ID=<hash of this file>, so ANY source edit invalidates every
+ * dump; a hand-maintained format id would not, because nobody bumps one when
+ * editing pseudo_moves. */
+#ifndef TH_BUILD_ID
+#define TH_BUILD_ID 0ULL     /* a build that did not pass -D: unidentified */
+#endif
+uint64_t th_build_id(void) { return (uint64_t)TH_BUILD_ID; }
+
 static uint64_t tt_seed_used = 0;
 
 int th_tt_save(const char *fname) {
     if (!tt) return -1;
     FILE *f = fopen(fname, "wb");
     if (!f) return -1;
-    uint64_t hdr[3] = {0x54494E59484F5553ULL, tt_mask + 1, tt_seed_used};
+    uint64_t hdr[4] = {0x54494E59484F5553ULL, tt_mask + 1, tt_seed_used,
+                       (uint64_t)TH_BUILD_ID};
     int ok = fwrite(hdr, sizeof hdr, 1, f) == 1 &&
              fwrite(tt, sizeof(TTEntry), tt_mask + 1, f) == tt_mask + 1;
     fclose(f);
     return ok ? 0 : -1;
 }
 
-/* returns 0 on success, -1 on missing/unreadable, -2 on size/seed mismatch */
+/* returns 0 on success, -1 on missing/unreadable, -2 on size/seed mismatch,
+ * -3 when the dump came from a different build of tinyhouse.c */
 int th_tt_load(const char *fname) {
     if (!tt) return -1;
     FILE *f = fopen(fname, "rb");
     if (!f) return -1;
-    uint64_t hdr[3];
+    uint64_t hdr[4];
     if (fread(hdr, sizeof hdr, 1, f) != 1 || hdr[0] != 0x54494E59484F5553ULL) { fclose(f); return -1; }
     if (hdr[1] != tt_mask + 1 || hdr[2] != tt_seed_used) { fclose(f); return -2; }
+    if (hdr[3] != (uint64_t)TH_BUILD_ID) { fclose(f); return -3; }
     int ok = fread(tt, sizeof(TTEntry), tt_mask + 1, f) == tt_mask + 1;
     fclose(f);
     return ok ? 0 : -1;
