@@ -14,12 +14,18 @@ _DIR = Path(__file__).parent
 _SRC = _DIR / "tinyhouse.c"
 _LIB = _DIR / "libtinyhouse.dylib"
 
+_CFLAGS = ["-O2", "-pthread", "-shared"]
+
 # Build fingerprint, compiled in as TH_BUILD_ID and stamped into every .tt
-# dump. Derived from the source rather than hand-maintained, because a format
-# id nobody bumps when editing pseudo_moves protects nothing: a dump written by
-# a build with different RULES has perfectly valid keys under the same Zobrist
-# seed, and used to load with rc = 0.
-_BUILD_ID = int.from_bytes(hashlib.sha1(_SRC.read_bytes()).digest()[:8], "little")
+# dump. Derived from the source AND the flags rather than hand-maintained: a
+# format id nobody bumps when editing pseudo_moves protects nothing, since a
+# dump written by a build with different RULES has perfectly valid keys under
+# the same Zobrist seed and used to load with rc = 0. Including the flags is
+# the conservative choice -- it means an -O0 build will not read an -O2 build's
+# dump, which costs nothing and cannot be wrong.
+_BUILD_ID = int.from_bytes(
+    hashlib.sha1(_SRC.read_bytes() + " ".join(_CFLAGS).encode()).digest()[:8], "little")
+_STAMP = _DIR / "libtinyhouse.buildid"
 
 # THB-15: tinyhouse.py's DOUBLE_STEP toggle has no counterpart in tinyhouse.c,
 # and the C engine is the one that searches. With the flag on, Python gives
@@ -35,9 +41,16 @@ if T.DOUBLE_STEP:
         "two engines would search different games (perft(2): 36 vs 33); mirror "
         "the rule in pseudo_moves() before enabling it.")
 
-if not _LIB.exists() or _LIB.stat().st_mtime < _SRC.stat().st_mtime:
-    subprocess.run(["cc", "-O2", "-pthread", "-shared", f"-DTH_BUILD_ID={_BUILD_ID}ULL",
+# THB-14: rebuild on the build IDENTITY, not on mtime. The old trigger
+# (`_LIB.mtime < _SRC.mtime`) missed a flag edit entirely -- the dylib hash was
+# measured unchanged across an -O2 -> -O0 -DTH_POISON change -- and mtime is
+# the wrong signal in the other direction too, since `git checkout` of an OLDER
+# tinyhouse.c also silently rebuilds backwards. A content-plus-flags stamp
+# handles both, and rebuilds only when something that matters actually changed.
+if not _LIB.exists() or not _STAMP.exists() or _STAMP.read_text().strip() != str(_BUILD_ID):
+    subprocess.run(["cc", *_CFLAGS, f"-DTH_BUILD_ID={_BUILD_ID}ULL",
                     "-o", str(_LIB), str(_SRC)], check=True)
+    _STAMP.write_text(str(_BUILD_ID))
 
 ffi = cffi.FFI()
 ffi.cdef("""

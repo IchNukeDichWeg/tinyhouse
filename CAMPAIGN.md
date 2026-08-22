@@ -56,7 +56,7 @@ line per item.
 | THB-10 | `/api/analyze` clamps depth above but not below | **CONFIRMED** |
 | THB-11 | one abandoned `/api/analyze` pins `ENGINE_LOCK` | **CONFIRMED** |
 | THB-15 | `DOUBLE_STEP` has no C counterpart | **CONFIRMED** |
-| THB-14 | dylib rebuild trigger ignores the compile flags | PENDING |
+| THB-14 | dylib rebuild trigger ignores the compile flags | **CONFIRMED** |
 | THB-13 | setup mode silently strips the promoted flag | PENDING |
 | THB-12 | GUI history corrupted by a click before `load()` resolves | PENDING |
 | TH-40 | `/api/analyze` mixes frames: `value` white-view, `snd` mover-view | **CONFIRMED** |

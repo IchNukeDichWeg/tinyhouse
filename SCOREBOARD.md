@@ -49,6 +49,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 16 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | see below |
 | 17 | TH-43 | 1 | **CONFIRMED** | node-identical (9,616,663 hunt d16 and 1,319,149 solve d14 on both arms); time x0.993/x1.000, inside spread | see below |
 | 18 | THB-15 | 1 | **CONFIRMED** | flag on: import now raises; divergence Python 6/36/274/2181/19317 vs C 6/33/241/1855/16021 | see below |
+| 19 | THB-14 | 1 | **CONFIRMED** | flags-only edit: dylib unchanged (sha1 4a7c8c7f) -> rebuilt (afeba22c -> 9d16118d) | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -454,3 +455,25 @@ legal move list from the *Python* generator while `analyze` evaluates with the
 an evaluation from an engine whose ruleset has no such move. The guard is
 therefore in `engine_c.py`, at the point where the C engine is loaded, and it
 raises rather than asserts because asserts vanish under `-O`.
+
+### THB-14 · the rebuild trigger ignored the compile flags
+
+Demonstrated in a scratch mirror, old trigger against new, same edit
+(`-O2` -> `-O0` and nothing else):
+
+| trigger | dylib sha1 before | after |
+|---|---|---|
+| mtime (old) | `4a7c8c7f...` | `4a7c8c7f...` — **no rebuild** |
+| content + flags (new) | `afeba22c...` | `9d16118d...` — rebuilt |
+
+The cdef half is confirmed **REFUTED as filed**, and no guard is added for it: a
+`ffi.cdef` edit is Python-side and needs no rebuild *by construction*, so
+"editing the cdef does not trigger a rebuild" is a category error rather than a
+defect. What a cdef edit actually needs is signature coverage, and that is a
+separate hole -- TH-22, still pending in tier 3.
+
+mtime was also wrong in the other direction: `git checkout` of an **older**
+`tinyhouse.c` silently rebuilds backwards. A content stamp handles both.
+
+Scope note from the backlog stands: the dylib is gitignored, so this is
+per-developer-machine only.

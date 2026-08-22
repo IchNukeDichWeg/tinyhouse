@@ -119,3 +119,24 @@ def test_importing_the_c_engine_refuses_a_double_step_ruleset():
         cwd=Path(__file__).parent, capture_output=True, text=True)
     assert r.returncode != 0
     assert "DOUBLE_STEP" in r.stderr and "36 vs 33" in r.stderr
+
+
+def test_the_loaded_library_was_built_from_this_source_and_these_flags():
+    """THB-14: the rebuild trigger was `dylib.mtime < source.mtime`.
+
+    A flags-only edit changed nothing it could see -- the dylib hash was
+    measured unchanged across an -O2 -> -O0 change -- and mtime is the wrong
+    signal in the other direction too, since `git checkout` of an OLDER
+    tinyhouse.c also silently rebuilds backwards. The stamp is the identity of
+    what was actually built, so this fails whenever the loaded library is stale.
+
+    The cdef half of the item is a category error and is not guarded here: a
+    ffi.cdef edit is Python-side and needs no rebuild by construction. What it
+    does need is signature coverage, which is TH-22.
+    """
+    import hashlib
+
+    expect = int.from_bytes(hashlib.sha1(
+        engine_c._SRC.read_bytes() + " ".join(engine_c._CFLAGS).encode()).digest()[:8], "little")
+    assert engine_c.lib.th_build_id() == expect
+    assert engine_c._STAMP.read_text().strip() == str(expect)
