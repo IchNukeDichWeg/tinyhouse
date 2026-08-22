@@ -138,13 +138,19 @@ def analyze(tfen: str, depth: int) -> dict:
         v = E.lib.th_solve(c, depth, bm, snd)
         mvs = E.ffi.new("uint16_t[128]")
         vals = E.ffi.new("int[128]")
-        n = E.lib.th_root_moves(c, depth, mvs, vals)
+        msnd = E.ffi.new("int[128]")
+        n = E.lib.th_root_moves(c, depth, mvs, vals, msnd)
         dt = time.perf_counter() - t0
         nodes = E.lib.th_nodes() - n0
     finally:
         ENGINE_LOCK.release()
+    # TH-35: each move carries its own soundness, in the same frame as its
+    # value. th_root_moves already swapped the flags for the negation it does
+    # internally; white_view_snd swaps again when the value is put in White's
+    # frame, so the two always travel together.
     moves = sorted(
-        ({"move": T.move_str(mvs[i]), "value": white_view(vals[i], pos.stm)} for i in range(n)),
+        ({"move": T.move_str(mvs[i]), "value": white_view(vals[i], pos.stm),
+          "snd": white_view_snd(msnd[i], pos.stm)} for i in range(n)),
         key=lambda x: -x["value"] if pos.stm == T.WHITE else x["value"])
     proven = abs(v) > T_MATE_BOUND or snd[0] == 3
     out = {"tfen": tfen, "depth": depth, "value": white_view(v, pos.stm),

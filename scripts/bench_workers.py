@@ -57,7 +57,7 @@ for w in counts:
         c = E.to_c(pos)
         n0 = E.lib.th_nodes()
         t0 = time.perf_counter()
-        v = E.lib.th_mate_hunt_mt(c, args.depth, args.color, w, bm)
+        v = E.lib.th_mate_hunt_mt(c, args.depth, args.color, w, bm, E.ffi.NULL)
         times.append(time.perf_counter() - t0)
         nodes.append(E.lib.th_nodes() - n0)
     med = statistics.median(times)

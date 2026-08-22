@@ -68,6 +68,8 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 35 | TH-27 | 3 | **CONFIRMED** | workers 1/2/4 all give 29991 + b4c2 at d9 and 0 at d8; helper-depth mutation passes (the budget guard absorbs it) | see below |
 | 36 | TH-32 | 3 | **CONFIRMED** | null-hypothesis calibration: identical builds measure +0.4% / -0.6% against 1.1-1.2% spread, both reported NULL; noise floor ~1% | see below |
 | 37 | TH-31 | 3 | **CONFIRMED** | contract pinned: counter unchanged across th_tt_init/th_seed and across perft(5)=16,021; no reset added | see below |
+| 38 | TH-34 | 3 | **CONFIRMED** | win branch snd=1 at d9/d11, negative branch snd=0 at d8/10/12/14 (assertion gated accordingly) | see below |
+| 39 | TH-35 | 3 | **CONFIRMED** | d1c2 now reports -29990 with snd 2 (SND_UB); all five quiet moves snd 0 | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -906,3 +908,43 @@ nowhere and nothing would catch it changing.
 concurrency and a reset is not, and every caller already differences. The
 counter's contract is now in the code and pinned by a test, which is the
 smaller change and the one that keeps working when a second thread appears.
+
+### TH-34 · expose `snd` from `th_mate_hunt_mt`
+
+A literal 0 was passed through, so the one self-consistency check available
+here could not be run at all. The framing correction is upheld: the PROVEN
+verdict does not rest on these flags -- with no static eval a mate score can
+only come from a real terminal, so a root fail-high above `MATE_BOUND` is
+already a proof -- but a check nobody can run is worth nothing.
+
+**The trap is real and was measured before wiring the check.** Root flags by
+branch:
+
+| hunt | depth | value | snd |
+|---|---|---|---|
+| start, White | 8 / 10 / 12 / 14 | 0 | **0 at every depth** |
+| recorded mate-in-9, Black | 9 / 11 | 29991 | 1 (`SND_LB`) |
+
+So the assertion is gated on the win branch only, exactly as the backlog warns.
+Asserting anything on the negative branch would fire at every depth of every
+real hunt. `solve_hunt.py` exits with a loud message if a reported win ever
+lacks `SND_LB`.
+
+The flags are returned in the hunted colour's frame, which needs the same
+LB/UB swap as everything else on the negated branch.
+
+### TH-35 · expose `snd` from `th_root_moves`
+
+**The sign correction is right and load-bearing, and it is now visible in the
+API.** From the start at depth 10, `d1c2` scores **-29990 with snd 2**
+(`SND_UB`) -- an *upper* bound in White's frame. The raw child flag is
+`SND_LB`; a badge reading it unswapped prints "lower bound" for an upper one.
+
+And the obvious acceptance test would have shipped that bug: "proven only when
+`snd == 3`" is invariant under the swap. The test written here asserts the
+mate row is specifically 2.
+
+The payoff correction is confirmed too: **all five quiet root moves carry snd 0**
+at depth 10. Proven draws are not reachable at GUI depths, so what this
+actually carries is mate-row soundness -- which is what the GUI now shows, via
+`fmtVal(mv.value, mv.snd)` instead of a hardcoded 0.

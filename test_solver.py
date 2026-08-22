@@ -310,7 +310,7 @@ def test_root_move_values_survive_any_table_size(tt, bits):
 def _root_values(E, depth):
     E.lib.th_clear_history()
     mvs, vals = E.ffi.new("uint16_t[128]"), E.ffi.new("int[128]")
-    n = E.lib.th_root_moves(E.to_c(T.Position.start()), depth, mvs, vals)
+    n = E.lib.th_root_moves(E.to_c(T.Position.start()), depth, mvs, vals, E.ffi.NULL)
     return {T.move_str(mvs[i]): vals[i] for i in range(n)}
 
 
@@ -412,11 +412,14 @@ def test_every_cffi_symbol_has_a_contract_check(tt):
     assert E.lib.th_solve_mt(E.to_c(mate9), 9, 1, bm, snd) == 29991; cover("th_solve_mt")
     assert E.lib.th_mate_hunt(E.to_c(mate9), 9, T.BLACK, bm) == 29991
     assert E.lib.th_mate_hunt(E.to_c(mate9), 8, T.BLACK, bm) == 0; cover("th_mate_hunt")
-    assert E.lib.th_mate_hunt_mt(E.to_c(mate9), 9, T.BLACK, 2, bm) == 29991
+    assert E.lib.th_mate_hunt_mt(E.to_c(mate9), 9, T.BLACK, 2, bm, snd) == 29991
+    assert snd[0] & 1, "a proven win must carry SND_LB in the winner's frame"
     cover("th_mate_hunt_mt")
 
     mvs, vals = E.ffi.new("uint16_t[128]"), E.ffi.new("int[128]")
-    assert E.lib.th_root_moves(E.to_c(start), 4, mvs, vals) == 6; cover("th_root_moves")
+    rsnd = E.ffi.new("int[128]")
+    assert E.lib.th_root_moves(E.to_c(start), 4, mvs, vals, rsnd) == 6
+    cover("th_root_moves")
     assert E.lib.th_build_id() >> 32; cover("th_build_id")
 
     # a path under a directory that does not exist: both must refuse. Not a
@@ -491,14 +494,15 @@ def test_the_smp_hunt_finds_the_same_proof_as_one_thread(tt):
         tt.lib.th_tt_init(20)
         tt.lib.th_clear_history()
         bm = tt.ffi.new("uint16_t *")
-        v = tt.lib.th_mate_hunt_mt(tt.to_c(T.Position.from_tfen(mate9)), 9, T.BLACK, workers, bm)
+        v = tt.lib.th_mate_hunt_mt(tt.to_c(T.Position.from_tfen(mate9)), 9, T.BLACK, workers, bm,
+                                   tt.ffi.NULL)
         assert v == 29991, f"{workers} workers gave {v}"
         assert T.move_str(bm[0]) == "b4c2"
 
         tt.lib.th_tt_init(20)
         tt.lib.th_clear_history()
         assert tt.lib.th_mate_hunt_mt(tt.to_c(T.Position.from_tfen(mate9)), 8, T.BLACK,
-                                      workers, bm) == 0
+                                      workers, bm, tt.ffi.NULL) == 0
 
 
 def test_the_node_counter_is_cumulative_and_ignores_perft(tt):

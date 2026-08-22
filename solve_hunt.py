@@ -148,6 +148,7 @@ if state_path.exists() and not args.fresh:
 
 pos = E.to_c(T.Position.from_tfen(args.tfen))
 bm = E.ffi.new("uint16_t *")
+hunt_snd = E.ffi.new("int *")
 name = "WHITE" if args.color == 0 else "BLACK"
 tty = sys.stdout.isatty()
 
@@ -241,7 +242,8 @@ for d in range(start_depth, args.maxdepth + 1, 2):
     result = {}
 
     def run():
-        result["v"] = E.lib.th_mate_hunt_mt(pos, d, args.color, args.workers, bm)
+        result["v"] = E.lib.th_mate_hunt_mt(pos, d, args.color, args.workers, bm, hunt_snd)
+        result["snd"] = hunt_snd[0]
         done.set()
 
     th = threading.Thread(target=run, daemon=True)
@@ -268,6 +270,15 @@ for d in range(start_depth, args.maxdepth + 1, 2):
           f"  nodes {n:>15,}  {dt:8.1f}s  {fmt(n/max(dt,1e-9))}nps  growth x{growth:.1f}", flush=True)
     state["depths"].append({"depth": d, "value": v, "nodes": n, "seconds": round(dt, 1)})
     if v > 29000:
+        # TH-34: the one self-consistency check the discarded flags made
+        # impossible. A root fail-high above MATE_BOUND must carry SND_LB in
+        # the winner's frame. Only on THIS branch: the negative branch is
+        # flag-free by design, and asserting anything there would fire at every
+        # depth of every real hunt.
+        if not (result["snd"] & 1):
+            sys.exit(f"INTERNAL: depth {d} reported a forced win ({v}) whose root "
+                     f"result carries no lower-bound soundness flag (snd={result['snd']}). "
+                     f"That contradicts the search's own invariants; do not trust this run.")
         state["result"] = {"proven": f"{name} forces a win", "plies": 30000 - v, "depth": d}
         save_state()
         print(f"PROVEN: {name} forces a win in {30000 - v} plies", flush=True)

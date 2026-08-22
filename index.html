@@ -288,8 +288,12 @@ async function analyze() {
     const tbl = $("moves");
     for (const mv of a.moves) {
       const tr = document.createElement("tr");
-      const fv = fmtVal(mv.value, 0);
+      // TH-35: each row carries its own soundness now, so a proven draw or a
+      // bounded value is distinguishable from "nothing found". A hardcoded 0
+      // here made every row read as unproven.
+      const fv = fmtVal(mv.value, mv.snd);
       tr.innerHTML = `<td>${mv.move}</td><td>${fv.t}</td>`;
+      tr.title = fv.s;
       tr.onclick = () => playMove(mv.move);
       tbl.appendChild(tr);
     }

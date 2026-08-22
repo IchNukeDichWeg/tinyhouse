@@ -329,3 +329,26 @@ def test_the_gui_carries_its_two_client_side_guards():
     page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
     assert "if (loading) return;" in page
     assert '"F~","U~","W~"' in page and '"f~","u~","w~"' in page
+
+
+def test_each_root_move_carries_its_own_soundness(srv):
+    """TH-35: th_root_moves discarded per-move soundness, and index.html
+    hardcoded 0 for it, so every row read as unproven.
+
+    The sign correction is the load-bearing part and it is asserted directly.
+    The child value is negated on the way out, and SND_LB/SND_UB are duals of
+    the value they describe, so the flags swap with it: from the start position
+    d1c2 scores -29990 in White's frame and must carry SND_UB (2), an UPPER
+    bound. A badge reading the raw child flag would print "lower bound".
+
+    The obvious acceptance test -- "proven only when snd == 3" -- is
+    insensitive to exactly this, because 3 is invariant under the swap.
+    """
+    code, a = srv("/api/analyze", tfen=START, depth=10)
+    rows = {m["move"]: m for m in a["moves"]}
+    assert rows["d1c2"]["value"] == -29990
+    assert rows["d1c2"]["snd"] == 2, "the mate row must be an UPPER bound in White's frame"
+    assert all(rows[m]["snd"] == 0 for m in rows if m != "d1c2")
+
+    page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
+    assert "fmtVal(mv.value, mv.snd)" in page

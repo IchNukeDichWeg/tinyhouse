@@ -90,8 +90,8 @@ line per item.
 | TH-20 | paired nodes-to-depth + solver-digest regression harness | **CONFIRMED** |
 | TH-31 | `th_nodes()` has no reset and does not count perft | **CONFIRMED** |
 | TH-27 | assert the SMP hunt returns the same proof as single-threaded | **CONFIRMED** |
-| TH-34 | expose `snd` from `th_mate_hunt_mt` | PENDING |
-| TH-35 | expose `snd` from `th_root_moves` | PENDING |
+| TH-34 | expose `snd` from `th_mate_hunt_mt` | **CONFIRMED** |
+| TH-35 | expose `snd` from `th_root_moves` | **CONFIRMED** |
 | TH-30 | test the Zobrist reseed contract | **CONFIRMED** |
 | TH-24 | extend the Python/C parity walk beyond the start position | PENDING |
 | TH-23 | pin `attacked()` against an independent geometric oracle | PENDING |

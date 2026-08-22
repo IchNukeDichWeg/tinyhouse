@@ -72,7 +72,7 @@ def child(lib_path, mode, tfen, depth, color, tt_bits, workers):
     bm, snd = ffi.new("uint16_t *"), ffi.new("int *")
     t0 = time.process_time()
     if mode == "hunt":
-        v = lib.th_mate_hunt_mt(c, depth, color, workers, bm)
+        v = lib.th_mate_hunt_mt(c, depth, color, workers, bm, snd)
     elif mode == "solve":
         v = lib.th_solve_mt(c, depth, workers, bm, snd)
     elif mode == "perft":

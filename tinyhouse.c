@@ -713,17 +713,40 @@ int th_search(THPos *p, int depth, uint16_t *bestmove) {
  * keying - a 64-bit collision has no directional structure and could prune a
  * subtree holding a real mate, so a second seed is the check on both, not just
  * on the wins. */
-int th_mate_hunt_mt(THPos *p, int depth, int color, int workers, uint16_t *bestmove) {
+/* TH-34: *snd carries the main thread's soundness flags out, in COLOR's frame.
+ * They were discarded (a literal 0 was passed through), which made the one
+ * self-consistency check available here impossible to run: a root fail-high
+ * above MATE_BOUND should always carry SND_LB. It is a check and not a missing
+ * proof step - with no static eval, a mate score can only come from a real
+ * terminal, so a fail-high above MATE_BOUND is already a proof - but a check
+ * nobody can run is worth nothing. Only meaningful on the WIN branch: the
+ * negative branch is flag-free by design and the root flags are empty at every
+ * depth of a real hunt. */
+int th_mate_hunt_mt(THPos *p, int depth, int color, int workers, uint16_t *bestmove, int *snd) {
     if (p->stm == color)
-        return root_search(p, depth, MATE_BOUND, MATE, workers, bestmove, 0);
-    return -root_search(p, depth, -MATE, -MATE_BOUND, workers, bestmove, 0);
+        return root_search(p, depth, MATE_BOUND, MATE, workers, bestmove, snd);
+    int v = -root_search(p, depth, -MATE, -MATE_BOUND, workers, bestmove, snd);
+    /* the value was negated into color's frame, and SND_LB/SND_UB are duals of
+     * the value they describe, so the bits swap with it */
+    if (snd)
+        *snd = ((*snd & SND_LB) ? SND_UB : 0) | ((*snd & SND_UB) ? SND_LB : 0);
+    return v;
 }
 int th_mate_hunt(THPos *p, int depth, int color, uint16_t *bestmove) {
-    return th_mate_hunt_mt(p, depth, color, 1, bestmove);
+    return th_mate_hunt_mt(p, depth, color, 1, bestmove, 0);
 }
 
-/* Per-root-move values at fixed depth (root side's perspective). */
-int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values) {
+/* Per-root-move values at fixed depth (root side's perspective).
+ * TH-35: out_snd (may be NULL) carries each move's soundness flags, in the
+ * frame of the value beside it. The child value is NEGATED on the way out and
+ * SND_LB/SND_UB are duals of the value they describe, so the bits must be
+ * SWAPPED - a badge reading the raw child flag prints "upper bound" for a
+ * lower bound. Note the obvious acceptance test, "badge proven only when
+ * snd == 3", is insensitive to exactly this, since 3 is invariant under the
+ * swap; that is how the sign error would ship. What is actually carried here
+ * is mate-row soundness: proven DRAWS are close to unreachable at GUI depths
+ * (2,301 of 2,302 quiet root moves at depth 10 had no flags at all). */
+int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values, int *out_snd) {
     uint16_t buf[128];
     int n = th_moves(p, buf);
     Undo u;
@@ -735,6 +758,8 @@ int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values) {
         int v = -search(p, depth - 1, 1, -MATE, MATE, &si);
         unmake(p, &u);
         out_moves[i] = buf[i]; out_values[i] = v;
+        if (out_snd)
+            out_snd[i] = ((si.snd & SND_LB) ? SND_UB : 0) | ((si.snd & SND_UB) ? SND_LB : 0);
     }
     nodes_flush();
     return n;
