@@ -157,3 +157,22 @@ def test_from_tfen_rejects_malformed(bad):
 
 def test_from_tfen_accepts_black_to_move():
     assert Position.from_tfen("fuwk/3p/P3/KWUF[-] b").stm == T.BLACK
+
+
+@pytest.mark.parametrize("bad", [
+    "K@a1",        # kings are never in hand; drop type 4 decrements hands[us][4]
+    "a1b2=K",      # M_PROMO masks with & 3, so =K silently became a plain a1b2
+    "a1b2=P",      # ...and =P likewise, dropping a forced promotion
+    "Z@a1",        # not a piece letter
+    "a9b2",        # not a square
+])
+def test_str_move_rejects_unrepresentable_moves(bad):
+    """THB-06: str_move produced moves no generator can emit.
+
+    `K@a1` yields drop type 4; the C make() does hands[us][4]-- on the same
+    alias THB-04 found, so a hand count goes negative and th_key then reads
+    zob_hand[...][-1], poisoning every TT key derived from it. The corruption
+    survives a tfen() round trip because "P" * -1 is "".
+    """
+    with pytest.raises(ValueError):
+        str_move(bad)

@@ -398,12 +398,28 @@ def move_str(m: int) -> str:
     return s
 
 def str_move(s: str) -> int:
+    """Parse a move string, rejecting anything the encoding cannot hold.
+
+    The drop field is the piece type and the promo field is two bits, so
+    `K@a1` and `a1b2=K` used to parse into moves no generator can emit. The
+    king drop is the dangerous one: C make() does hands[us][4]--, hitting the
+    alias THB-04 found, so a hand count goes negative and th_key then reads
+    zob_hand[...][-1] and poisons every key derived from it - invisibly,
+    because "P" * -1 is "". `=K` and `=P` were the quiet half, masking down to
+    a plain a1b2 and dropping the forced promotion.
+    """
     if "@" in s:
-        return mv_drop(TYPE_CHARS.index(s[0]), name_sq(s.split("@")[1]))
+        t = TYPE_CHARS.index(s[0])
+        if t == K:
+            raise ValueError(f"kings are never in hand: {s!r}")
+        return mv_drop(t, name_sq(s.split("@")[1]))
     promo = 0
     if "=" in s:
-        s, p = s.split("=")
+        body, p = s.split("=")
         promo = TYPE_CHARS.index(p)
+        if promo not in (F, U, W):
+            raise ValueError(f"promotion is to F, U or W only: {s!r}")
+        s = body
     return mv(name_sq(s[:2]), name_sq(s[2:4]), promo)
 
 

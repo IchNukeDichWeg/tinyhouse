@@ -36,6 +36,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 3 | THB-03 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | see below |
 | 4 | THB-05 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; whole-suite cost of validating every to_c call is 4.63s -> 4.68s (noise) | see below |
 | 5 | THB-04 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; guard is a no-op on legal input (no king capture is generated from a validated position) | see below |
+| 6 | THB-06 | 1 | **CONFIRMED** | parse-time rejection; perft(7) 1,355,253 unchanged | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -157,3 +158,19 @@ a node count.
 
 perft(7) from the start unchanged at 1,355,253, so the guard is a no-op on
 legal input.
+
+### THB-06 · `str_move` produced moves the encoding cannot hold
+
+Reproduced: `str_move("K@a1")` returns 320, drop type 4. Feeding it to
+`th_make` from the start position leaves `hands[1] == [-1, 0, 0, 0]` -- the
+same `hands[0][4] == hands[1][0]` alias THB-04 found, driven negative. `th_key`
+then indexes `zob_hand[1][0][-1]`, so every TT key derived from that position
+is poisoned, and a `tfen()` round trip cannot see it because `"P" * -1` is `""`.
+
+The `=K` half is confirmed as the *quiet* defect the backlog described, not a
+memory bug: `a1b2=K` and `a1b2=P` both parsed to a plain `a1b2` with the promo
+field masked to 0 by `& 3`, silently dropping a forced promotion. Both are now
+rejected; they are different severities and stay separately described.
+
+Latent in the shipped product either way -- the only caller passing strings to
+`str_move` is the test suite. perft(7) unchanged at 1,355,253.
