@@ -46,6 +46,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | see below |
 | 14 | TH-40 | 1 | **CONFIRMED** | mirrored pair now reports snd 2 vs 1 (was 1 vs 1); cache namespace moves automatically via TH-42 | see below |
 | 15 | THB-11 | 1 | **CONFIRMED** | contended trivial request: unbounded wait -> 503 after 20s; GUI depth cap 22 -> 16 on measured cost (d16 10.25s, d18 98.77s cold) | see below |
+| 19 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -393,3 +394,18 @@ worst case, so a legitimately queued request still succeeds rather than 503ing.
 It is a `<select>`, so a mouse selection fires once; keyboard arrow navigation
 can fire per option in some browsers, and with the cap at 16 the worst that
 queues is a 10s search that now times out instead of hanging.
+
+### TH-44 · error responses echoed absolute filesystem paths
+
+The blanket `except Exception: send_json({"error": str(e)}, 400)` returned
+whatever the exception carried, and plenty carry a path -- `IsADirectoryError`
+on a subdirectory of `/pieces/` has the full absolute path as its message. It
+applies to **every** endpoint, and the `127.0.0.1` bind was the only mitigation.
+
+Now typed: `ValueError` still echoes, because those are this project's own
+validation messages and they quote the caller's own input. `KeyError` becomes a
+named missing-parameter error. Everything else is a 500 saying `internal
+error`, with the traceback printed locally where the operator can see it.
+
+Pinned by planting the exception rather than by creating a directory inside the
+repo, since the defect is generic and a test must not write to a repo path.

@@ -6,6 +6,7 @@ import json
 import sqlite3
 import threading
 import time
+import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -223,8 +224,19 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": "not found"}, 404)
         except EngineBusy as e:
             self.send_json({"error": str(e)}, 503)
-        except Exception as e:  # surface engine/parse errors to the UI
+        except ValueError as e:
+            # our own validation: the message quotes the caller's own input
             self.send_json({"error": str(e)}, 400)
+        except KeyError as e:
+            self.send_json({"error": f"missing query parameter {e}"}, 400)
+        except Exception:
+            # TH-44: a blanket `str(e)` echoed whatever the exception carried,
+            # and plenty carry an absolute filesystem path -- GET on a
+            # subdirectory of /pieces/ raises IsADirectoryError, whose message
+            # is the full path. Log it here, tell the client nothing. Applies
+            # to every endpoint; the 127.0.0.1 bind was the only mitigation.
+            traceback.print_exc()
+            self.send_json({"error": "internal error"}, 500)
 
 
 if __name__ == "__main__":

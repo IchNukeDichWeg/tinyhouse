@@ -270,3 +270,30 @@ def test_the_gui_cannot_ask_for_a_non_interactive_depth(srv):
         server.MAX_GUI_DEPTH = 16
     page = (__import__("pathlib").Path(__file__).parent / "index.html").read_text()
     assert "[8,10,12,14,16]" in page
+
+
+def test_an_internal_error_does_not_echo_a_filesystem_path(srv, monkeypatch, capfd):
+    """TH-44: the blanket `except Exception` echoed str(e) into the body.
+
+    Plenty of exceptions carry an absolute path -- a GET on a subdirectory of
+    /pieces/ raises IsADirectoryError, whose message is the full path -- and
+    the only mitigation was the 127.0.0.1 bind. Applies to every endpoint, so
+    it is pinned by planting the exception rather than by needing a directory
+    inside the repo.
+    """
+    secret = "/Users/somebody/private/checkout/Tinyhouse/pieces/sub"
+
+    def boom(_tfen):
+        raise IsADirectoryError(21, "Is a directory", secret)
+
+    monkeypatch.setattr(srv.module, "position_info", boom)
+    code, err = srv("/api/position", tfen=START)
+    assert code == 500
+    assert secret not in json.dumps(err)
+    assert err["error"] == "internal error"
+    assert secret in capfd.readouterr().err          # still logged locally
+
+
+def test_a_missing_query_parameter_is_a_400(srv):
+    code, err = srv("/api/position")
+    assert code == 400 and "tfen" in err["error"]
