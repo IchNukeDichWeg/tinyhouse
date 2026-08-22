@@ -524,6 +524,51 @@ static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks
     return history[(int)p->stm][m & 2047] + j;
 }
 
+/* TH-08: the horizon asks one yes/no question - "is there a legal move" - and
+ * used to build the entire pseudo-move list to answer it, then walk it until
+ * the first legal move. Two things make that cheap instead.
+ *
+ * A drop can never expose the mover's own king, so if the mover is NOT in
+ * check and holds any piece with a legal empty target, a legal move exists and
+ * nothing needs generating. The in-check gate is not optional: being in check
+ * is exactly the case where a drop must BLOCK. Gating drops as unconditionally
+ * legal without it gives perft(6) = 3,226,861 against the true 139,141.
+ *
+ * Otherwise it falls back to generate-and-test, which is what the old code did
+ * unconditionally. Node counts cannot change: the horizon never recurses, so
+ * only the yes/no answer escapes this function.
+ *   0 = pre-change behaviour, the node-identity pin for a toggle-off run
+ *   1 = shipped */
+#define HORIZON_FAST_PATH 1
+
+static int horizon_has_move(THPos *p, int in_check) {
+#if HORIZON_FAST_PATH
+    if (!in_check) {
+        int us = p->stm;
+        for (int t = 0; t < 4; t++) {
+            if (!p->hands[us][t]) continue;
+            for (int s = 0; s < 16; s++) {
+                if (p->board[s]) continue;
+                if (t == P && ((s >> 2) == 0 || (s >> 2) == 3)) continue;
+                return 1;
+            }
+        }
+    }
+#else
+    (void)in_check;
+#endif
+    uint16_t buf[128];
+    int n = pseudo_moves(p, buf);
+    Undo u;
+    for (int i = 0; i < n; i++) {
+        make(p, buf[i], &u);
+        int ok = !th_in_check(p, 1 - p->stm);
+        unmake(p, &u);
+        if (ok) return 1;
+    }
+    return 0;
+}
+
 static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) {
     si->rep_min = MAXPLY;
     si->snd = 0;
@@ -563,21 +608,17 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si) 
         }
     }
 
-    uint16_t buf[128];
-    int n = pseudo_moves(p, buf);
     Undo u;
     int any = 0;
     if (depth <= 0) {
-        for (int i = 0; i < n && !any; i++) {
-            make(p, buf[i], &u);
-            if (!th_in_check(p, 1 - p->stm)) any = 1;
-            unmake(p, &u);
-        }
-        if (any) return 0;                    /* unknown: no soundness */
+        int in_chk = th_in_check(p, p->stm);
+        if (horizon_has_move(p, in_chk)) return 0;   /* unknown: no soundness */
         si->snd = SND_LB | SND_UB;
-        return th_in_check(p, p->stm) ? -(MATE - ply) : (MATE - ply);
+        return in_chk ? -(MATE - ply) : (MATE - ply);
     }
 
+    uint16_t buf[128];
+    int n = pseudo_moves(p, buf);
     int scores[128];
     int enemy_ks = king_sq(p, 1 - p->stm);
     for (int i = 0; i < n; i++) scores[i] = order_score(p, buf[i], ttm, ply, enemy_ks);

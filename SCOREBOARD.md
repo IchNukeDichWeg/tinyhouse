@@ -76,6 +76,7 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 | 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | `a064fd6` |
 | 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | `d0e1350` |
 | 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | `94ea4f2` |
+| 46 | TH-08 | 4 | **CONFIRMED** | +4.04% solve d14, +3.69/+3.93% hunt d16 vs a 0.2-0.4% control; NULL on drop-heavy; node-identical | see below |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -1094,3 +1095,41 @@ error. Roughly 30 lines of test for zero measured detection: **not merged**.
 The residue is kept where it does pay: `sigma` lives in `test_server.py`, where
 a colour-mirrored pair is exactly the right instrument for the TH-40 frame
 duality.
+
+---
+
+## Tier 4 — NPS. Measurement conditions
+
+Apple M2 Pro, 10 cores, 16 GiB, Darwin 25.5.0. `pgrep solve_hunt|server.py`
+empty for every run, but the machine was **not otherwise quiet** -- Chrome was
+using 60-70% of a core throughout, load average ~3. That is why every result
+below carries a **same-build control arm** measured in the same interleaved
+session: individual runs scatter 3-11%, while the medians of two byte-identical
+builds land within 0.2-1.1%. The control delta is the noise floor, not the
+spread.
+
+### TH-08 · horizon fast path — CONFIRMED, and smaller than reported
+
+Node-identical, which is the acceptance test: 1,319,149 / 9,616,663 / 97,099 on
+every arm, and the regression digest `651da0519b02a4b7` unchanged.
+
+| workload | control | TH-08 | verdict |
+|---|---|---|---|
+| solve d14, start | +0.36% | **+4.04%** | signal |
+| hunt d16, start | -0.23% | **+3.69%** | signal |
+| hunt d16, start (second session) | +0.44% | **+3.93%** | signal |
+| solve d12, drop-heavy `1k2/4/2K1/4[PFUWpfuw] w` | +1.09% | +0.51% | **NULL** |
+
+**Two corrections to the backlog, both measured.** The reported gains were
+1.104x on the hunt and 1.124x on solve d14; the real figures are **1.037-1.040x**
+and **1.040x** -- about a third of the claim, consistently across three
+sessions. And the reported **1.210x on a drop-heavy position does not reproduce
+at all**: +0.51% against a +1.09% control is NULL. That is the workload the
+item singles out as its best case.
+
+**The toggle-off pin is node-identical but not time-identical, and that is
+worth saying.** `HORIZON_FAST_PATH 0` measures **-2.42%** against the original
+tree, so the restructuring alone (hoisting `pseudo_moves` past the horizon
+branch and moving the existence test into its own function) costs about 2.4%,
+and the fast path itself buys about 6.5% over that. The net gain over the
+previous tree, which is the number that counts, is **+3.9%**.
