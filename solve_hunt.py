@@ -25,14 +25,23 @@ WORKERS: defaults to 1, because lazy SMP is nondeterministic - helpers
 perturb move ordering, so the same depth run twice gives different node counts
 (820 and 807 on one shallow depth). The proofs do not depend on the thread
 count; the reproducibility of the recorded node counts does.
-Scaling here is DEPTH-DEPENDENT and only measured shallow.
-At depth 18 on an Apple M2 Pro (10 cores, 3 repeats, fresh table per run) 1
-and 2 threads tie within noise (median 27.8s vs 28.4s) and 3+ regresses
-badly (52s, 50s) - helpers duplicate work and perturb move ordering in a
-null-window proof search. Deeper searches plausibly scale better as the
-shared table fills, but that is UNMEASURED: do not extrapolate depth 18 to
-depth 24. Measure at your target depth with scripts/bench_workers.py before
-committing a long run.
+Scaling here is DEPTH-DEPENDENT, and the direction REVERSES between depth 18
+and depth 20. Apple M2 Pro, 10 cores, fresh table and cleared history per run:
+
+  depth 18 (3 repeats, medians): 1w 27.8s · 2w 28.4s · 3w 51.7s · 4w 49.7s
+  depth 20 (1 sample per arm):   1w 164.6s · 2w 88.5s · 4w 87.5s
+                                 6w 66.1s · 8w 88.8s
+
+So at 18 anything past 2 threads regresses hard, and at 20 six threads are
+2.49x faster than one. Helpers duplicate work either way - the depth-20
+six-thread run costs 1.42G nodes against 682M for one thread - but past depth
+18 the wall clock wins anyway, presumably because the shared table stops being
+mostly empty. Depth 20 predicting depth 26 is still an extrapolation; measure
+at your own target depth with scripts/bench_workers.py before a long run.
+
+The PROOFS do not depend on the thread count (test_solver.py pins that workers
+1, 2 and 4 reach the same proof). The reproducibility of the node counts does,
+which is why the default is 1.
 """
 import argparse
 import hashlib

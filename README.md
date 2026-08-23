@@ -90,12 +90,16 @@ wins.
 line per completed depth. Ctrl-C is safe — every completed depth is already printed.
 
 ```bash
-.venv/bin/python solve_hunt.py 0 --tt 27
+.venv/bin/python solve_hunt.py 0 --tt 27 --workers 6 --maxdepth 26
 ```
 
 ```bash
-.venv/bin/python solve_hunt.py 1 --tt 27
+.venv/bin/python solve_hunt.py 1 --tt 27 --workers 6 --maxdepth 28
 ```
+
+Run them one after the other, not together: six workers each would oversubscribe a
+10-core machine. At six workers depth 22 is roughly 9 minutes, depth 24 about 70,
+and depth 26 around 9–10 hours.
 
 `color 0` hunts a White forced win, `1` hunts Black. `--tt BITS` is log2 of TT
 entries (27 = 2 GiB). `--maxdepth D` stops early, `--tfen` hunts from another
@@ -110,11 +114,23 @@ ignores it.
 **On `--workers`:** it defaults to **1**, because lazy SMP is nondeterministic — helpers
 perturb move ordering, so the same depth run twice gives different node counts. The
 proofs never depended on the thread count; the reproducibility of the recorded node
-counts does. Scaling is depth-dependent and only measured shallow. At depth 18
-(M2 Pro, 3 repeats, fresh table each run) 1 and 2 threads tie within noise, 3+
-regresses hard. Deeper runs may scale better as the shared table fills — that is
-unmeasured, so measure at your real target depth rather than trusting a shallow
-number:
+counts does.
+
+Scaling is depth-dependent, and the direction **reverses** between depth 18 and 20
+(M2 Pro, 10 cores):
+
+| workers | depth 18 (medians of 3) | depth 20 (1 sample) |
+|---|---|---|
+| 1 | 27.8s | 164.6s |
+| 2 | 28.4s | 88.5s |
+| 4 | 49.7s | 87.5s |
+| 6 | — | **66.1s** |
+| 8 | — | 88.8s |
+
+At depth 18 anything past two threads regresses hard; at depth 20 six threads are
+**2.49× faster** than one, presumably because the shared table stops being mostly
+empty. For a deep overnight run, `--workers 6` is the measured choice — but depth 20
+predicting depth 26 is still an extrapolation, so measure at your own target depth:
 
 ```bash
 .venv/bin/python scripts/bench_workers.py --depth 22 --workers 1,2,4 --repeats 2
