@@ -1052,11 +1052,19 @@ TH-08 → TH-09 → TH-10 → TH-11 (perft half only) → TH-12. Land TH-19 **fi
 measurements that justify each step are biased. Every one of these is node-identical;
 that identity is the acceptance test.
 
-### Lane 6 — the draw proof
+### Lane 6 — the draw proof  *(milestone run; see SCOREBOARD.md)*
 TH-37 (census, already run) prices it; TH-36 (df-pn) is the only formulation that can
 close it. Gate on the milestone: unbounded df-pn from the start with a node cap,
 watching root `dn`. Falling means viable, plateauing means no. **A one-day answer to a
 question the repo has been carrying since phase 4.**
+
+**Run, and the answer is no for this formulation.** `scripts/dfpn.py` is
+validated (178 agreements against the alpha-beta engine, 0 disagreements; the
+recorded mate in 9 proven in 2,770 nodes) and it resolves 1 of 6 root moves in
+2.4M nodes from the start, with three disproof numbers frozen and two rising.
+The conservative graph-history rule withholds **39%** of everything it computes.
+A C implementation with Kishimoto-Muller twins is the next step, and that 39% is
+the number it would attack.
 
 **Highest value**: Lane 2 — the solver is the product and it has no automated
 coverage at all. **Cheapest**: Lane 3, about ten lines for three confirmed bugs.

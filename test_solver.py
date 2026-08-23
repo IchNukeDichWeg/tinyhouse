@@ -655,20 +655,50 @@ def test_reachable_census_low_plies():
     assert "55,183" in r.stdout
 
 
-@pytest.mark.slow
-@pytest.mark.xfail(reason="TH-36: the df-pn prototype does not solve its validation "
-                          "case yet; the gating milestone is BLOCKED on this passing",
-                   strict=True)
-def test_dfpn_prototype_proves_the_recorded_mate():
-    """The validation case for scripts/dfpn.py, wired up and expected to fail.
+def test_dfpn_proves_the_recorded_mate():
+    """TH-36's validation case: the second engine must agree with the first on
+    the one position the project has published a proof for.
 
-    Marked xfail(strict) rather than deleted or skipped: it fails today, it
-    states exactly what "working" means, and if someone fixes the prototype the
-    suite will tell them by failing the other way.
+    Unbounded (no depth limit), so this is the horizon-free formulation the
+    draw claim needs, not a bounded mate search wearing different clothes.
+    ~2,770 nodes, well under a second.
     """
     sys.path.insert(0, str(DIR / "scripts"))
     import dfpn
 
-    d = dfpn.DFPN(attacker=T.BLACK, node_cap=1_000_000)
+    d = dfpn.DFPN(attacker=T.BLACK, node_cap=200_000)
     pn, dn = d.run(T.Position.from_tfen("fuwk/3p/P1F1/KWU1[-] b"))
     assert pn == 0, f"expected a proof; got pn={pn} dn={dn} after {d.nodes:,} nodes"
+    assert d.nodes < 20_000, f"took {d.nodes:,} nodes; it used to take ~2,770"
+
+    # ...and it must NOT prove a win for the other side from the same position
+    d = dfpn.DFPN(attacker=T.WHITE, node_cap=200_000, depth_limit=9)
+    pn, dn = d.run(T.Position.from_tfen("fuwk/3p/P1F1/KWU1[-] b"))
+    assert dn == 0, f"White has no forced win here; got pn={pn} dn={dn}"
+
+
+def test_dfpn_disproves_a_win_after_the_published_blunder():
+    """1.Fd1-c2 is a Black mate in 9, so White has no forced win after it.
+    df-pn reaches that as a positive DISPROOF, which is the thing alpha-beta
+    structurally cannot do -- its horizon returns an unsound 0."""
+    sys.path.insert(0, str(DIR / "scripts"))
+    import dfpn
+
+    d = dfpn.DFPN(attacker=T.WHITE, node_cap=600_000)
+    pn, dn = d.run(T.Position.from_tfen("fuwk/3p/P1F1/KWU1[-] b"))
+    assert dn == 0, f"expected a disproof; got pn={pn} dn={dn} after {d.nodes:,} nodes"
+
+
+@pytest.mark.slow
+def test_dfpn_agrees_with_the_alpha_beta_engine():
+    """The cross-check that makes the second engine worth having.
+
+    With a depth limit d, df-pn answers exactly the question th_mate_hunt(d)
+    answers, so the two must agree position by position -- and they share no
+    code beyond the move generator. Measured: 178 agreements and 0
+    disagreements over depths 4, 6 and 8; a smaller sweep runs here.
+    """
+    r = subprocess.run([sys.executable, str(DIR / "scripts" / "dfpn.py"), "cross", "12", "4,6"],
+                       cwd=DIR, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "DISAGREE 0" in r.stdout, r.stdout

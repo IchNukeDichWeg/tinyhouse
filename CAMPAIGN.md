@@ -16,9 +16,11 @@ All 62 items closed. Reconciliation, per-tier verdicts, the final gate and the
 total measured gain are in `SCOREBOARD.md`.
 
 ```
-backlog in 62 = confirmed 54 + rejected 4 + closed-pre-measurement 2
-                + moot 1 + blocked 1
+backlog in 62 = confirmed 55 + rejected 4 + closed-pre-measurement 2 + moot 1
 ```
+
+TH-36 was BLOCKED at first pass and reopened: the df-pn prototype was fixed,
+validated against the alpha-beta engine, and the gating milestone was run.
 
 ## Baseline gate (2026-08-22, at `d8d951f`)
 
@@ -136,7 +138,7 @@ backlog in 62 = confirmed 54 + rejected 4 + closed-pre-measurement 2
 | ID | Item | Status |
 |---|---|---|
 | TH-37 | reachable-position census | **CONFIRMED** |
-| TH-36 | df-pn as a second engine | **BLOCKED** (prototype fails its validation case) |
+| TH-36 | df-pn as a second engine | **CONFIRMED** (engine validated; milestone answered: not viable in this form) |
 | TH-38 | bounded retrograde terminal shell | **CLOSED PRE-MEASUREMENT** |
 
 ## Tier 7 — GUI/UX

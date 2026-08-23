@@ -1632,6 +1632,86 @@ verdict in `RULES.md` is a measurement rather than an argument. Growth sits near
 smaller than the 1.77e13 the notation can express -- and still far too large for
 a retrograde table.
 
+### TH-36 · df-pn as a second engine — CONFIRMED (reopened after being BLOCKED)
+
+**First pass: BLOCKED.** The prototype failed its own validation case and I
+declined to read the milestone off it. Reopened on request, debugged, and the
+milestone has now actually been run. What follows replaces that verdict; the
+original write-up is kept below it, because being wrong first is part of the
+record.
+
+**Two bugs, and the second is the interesting one.**
+
+1. The depth limit was tested **before** the terminal check, so a mate reached
+   exactly at the limit was scored as the attacker failing. A depth-9 search
+   therefore could not see a mate in 9.
+2. **The conservative store rule destroyed df-pn's progress guarantee.** df-pn
+   advances by re-reading a child after searching it. A child whose value was
+   withheld as path-dependent reads back as the `(1, 1)` initial estimate, so
+   the parent selects it again, searches it again, and never terminates. That
+   is what pinned the table at 15 entries over a million nodes -- an infinite
+   loop, not starvation. The fix is a per-node **local** cache: a value that is
+   path-dependent is still valid within one call of `mid()`, where the path
+   prefix is fixed, so it is usable there while still being kept out of the
+   global table.
+
+**Validated, which is what makes any of the rest quotable:**
+
+| check | result |
+|---|---|
+| recorded mate in 9, unbounded | **PROVED in 2,770 nodes** |
+| recorded mate in 9, depth-limited to 9 | PROVED in 1,863 nodes (backlog reported ~1,949) |
+| White has no win from the same position | DISPROVED |
+| agreement with `th_mate_hunt` at depths 4, 6, 8 | **178 agree, 0 disagree** |
+
+The cross-check is the real validation: with a depth limit d, df-pn answers
+exactly the question `th_mate_hunt(d)` answers, and the two engines share no
+code beyond the move generator.
+
+**The gating milestone, run at last.** df-pn on "White forces a win" from the
+start, per root move, `dn` from White's side:
+
+| nodes | resolved | rep leaves | withheld | a1b2 | a2a3 | b1b2 | c1b3 | c1d3 | d1c2 |
+|---|---|---|---|---|---|---|---|---|---|
+| 300k | 0/6 | 47,662 | 110,980 | 7 | 367 | 8 | 1 | 334 | 4 |
+| 600k | 1/6 | 99,647 | 232,712 | 7 | 520 | 8 | 1 | 475 | **DISPROVED** |
+| 1.2M | 1/6 | 216,189 | 500,328 | 7 | 712 | 8 | 1 | 666 | **DISPROVED** |
+| 2.4M | 1/6 | 434,212 | 980,157 | 7 | 968 | 8 | 1 | 948 | **DISPROVED** |
+
+**The milestone's answer is NO for this formulation.** Three columns are frozen
+across an eightfold increase in nodes and two are *rising* -- the disproof is
+getting further away, not closer. One root move resolves: `d1c2` is DISPROVED,
+which is independently correct, since that move is the published Black mate in
+9. That single result is worth noting on its own -- it is a positive **disproof
+of a win**, the thing alpha-beta structurally cannot produce, because its
+horizon returns an unsound 0.
+
+**What the conservative rule costs, measured at 600k nodes**, against an
+UNSOUND arm that stores path-dependent values anyway (its answers cannot be
+trusted; only its bookkeeping is informative):
+
+| store rule | tt entries | withheld | a1b2 | a2a3 | b1b2 | c1b3 | c1d3 |
+|---|---|---|---|---|---|---|---|
+| sound | 244,290 | **232,712 (39%)** | 7 | 520 | 8 | 1 | 475 |
+| unsound | 365,351 | 10,880 (1.8%) | 287 | 628 | 652 | 585 | 585 |
+
+The sound arm withholds **39%** of everything it computes. Its tiny frozen
+numbers (7, 8, 1) are not a nearly-finished disproof; they are amnesia -- small
+estimates re-derived from scratch because nothing accumulates. The unsound arm's
+larger numbers reflect knowledge actually retained. **Neither arm converges on
+the start position**, so twin entries alone would not close it either.
+
+**Scope, stated plainly.** This is a Python prototype at roughly 5,000 nodes per
+second, and 2.4M nodes is a small budget by df-pn standards. The honest verdict
+is "not viable in this formulation at this budget", not "df-pn cannot work
+here". The next step, if anyone takes it, is a C implementation with
+Kishimoto-Muller twin entries -- and the 39% figure above is the specific thing
+twins would attack.
+
+---
+
+#### Original first-pass write-up (verdict since superseded)
+
 ### TH-36 · df-pn as a second engine — BLOCKED
 
 A df-pn prototype is written and committed (`scripts/dfpn.py`), and it **fails

@@ -55,7 +55,10 @@ The game is **not solved**. What is proven so far (machine-readable in
 - no forced **White** win within **20 plies** (729M nodes)
 - no forced **Black** win within **22 plies** (303M nodes)
 
-so the game value is still open, consistent with the draw its reception suggests. The
+so the game value is still open, consistent with the draw its reception suggests.
+`scripts/dfpn.py` reaches one result alpha-beta structurally cannot: a positive
+**disproof** that White has any forced win after `1.Fd1-c2`, rather than merely
+failing to find one. The
 engine **can** prove a draw, which was previously believed out of reach: bare kings
 (`2K1/4/4/2k1[-] w`) come back `value 0, snd 3` — an exact, proven game value — at
 depth 100. It is depth and not position that was missing; the only terminal-free
@@ -151,9 +154,14 @@ them:
 - **`--workers` at depth 20+.** One and two tie within noise at 18, three and
   beyond regress; deeper is unmeasured, and `scripts/bench_workers.py` is the
   tool.
-- **A working df-pn engine.** `scripts/dfpn.py` is a prototype that fails its
-  own validation case; the draw claim needs a horizon-free search and this is
-  not one yet.
+- **A df-pn engine that can actually close the draw claim.** `scripts/dfpn.py`
+  works and is validated against the alpha-beta engine (178 agreements, 0
+  disagreements; it proves the recorded mate in 9 in 2,770 nodes). But the
+  gating milestone says **no** for this formulation: on the start position it
+  resolves 1 of 6 root moves in 2.4M nodes while three disproof numbers sit
+  still and two rise. It is a Python prototype at ~5k nodes/s, and the
+  conservative graph-history rule withholds 39% of everything it computes —
+  a C implementation with Kishimoto-Müller twin entries is the next step.
 - **Whether history carry-over across iterative-deepening depths helps.**
   `CLEAR_HISTORY_AT_ROOT` exists and is off, because that is a different
   experiment from repeats at one depth and nobody has run it.
