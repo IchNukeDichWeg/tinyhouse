@@ -31,69 +31,69 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 
 | # | ID | Tier | Verdict | Metric | Commit |
 |---|---|---|---|---|---|
-| 1 | THB-01 | 0 | **CONFIRMED** | fix costs nothing on the bounds path: start-position negative hunt d16 White 9,913,857 -> 9,616,663 nodes (-3.0%), Black 1,824,606 -> 1,791,866 (-1.8%); repro position d13 8,279,609 -> 8,988,304 (+8.6%) | `8b2e81c` |
-| 2 | THB-02 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | `ee9a07a` |
-| 3 | THB-03 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | `fe7d586` |
-| 4 | THB-05 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; whole-suite cost of validating every to_c call is 4.63s -> 4.68s (noise) | `6e2fa60` |
-| 5 | THB-04 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; guard is a no-op on legal input (no king capture is generated from a validated position) | `4182411` |
-| 6 | THB-06 | 1 | **CONFIRMED** | parse-time rejection; perft(7) 1,355,253 unchanged | `61709fd` |
-| 7 | TH-21 | 3 | **CONFIRMED** | coverage; suite 59 -> 61 tests, +0.0s | `1e17566` |
-| 8 | THB-07 | 1 | **CONFIRMED** | foreign-rule dump: rc 0 -> -3; header 24 -> 32 bytes, so pre-existing dumps are invalidated by design | `cb6a56d` |
-| 9 | THB-08 | 1 | **CONFIRMED** | failed save: silent exit-0 -> WARNING + intact previous dump; perft(7) 1,355,253 unchanged | `33ed079` |
-| 10 | THB-10 | 1 | **CONFIRMED** | depth 0 and -5 now clamp to 1; repo DB had 0 rows to clean (4 rows, depths 8/14) | `e937cc7` |
-| 11 | THB-09 | 1 | **CONFIRMED** | unproven rows no longer stored; build_book 8 1 keeps 0 of 7 visited (nothing that shallow is proven) | `a7f89c8` |
-| 12 | TH-41 | 1 | **CONFIRMED** | labelling only; no engine or node-count effect | `d995bb2` |
-| 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | `f128cf0` |
-| 14 | TH-40 | 1 | **CONFIRMED** | mirrored pair now reports snd 2 vs 1 (was 1 vs 1); cache namespace moves automatically via TH-42 | `5c9e9af` |
-| 15 | THB-11 | 1 | **CONFIRMED** | contended trivial request: unbounded wait -> 503 after 20s; GUI depth cap 22 -> 16 on measured cost (d16 10.25s, d18 98.77s cold) | `b20476c` |
-| 16 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | `7c2f5cd` |
-| 17 | TH-43 | 1 | **CONFIRMED** | node-identical (9,616,663 hunt d16 and 1,319,149 solve d14 on both arms); time x0.993/x1.000, inside spread | `a784459` |
-| 18 | THB-15 | 1 | **CONFIRMED** | flag on: import now raises; divergence Python 6/36/274/2181/19317 vs C 6/33/241/1855/16021 | `2a4e605` |
-| 19 | THB-14 | 1 | **CONFIRMED** | flags-only edit: dylib unchanged (sha1 4a7c8c7f) -> rebuilt (afeba22c -> 9d16118d) | `125e934` |
-| 20 | THB-12 | 1 | **CONFIRMED** | browser-verified: two unawaited clicks record 1 move, not 2 (guard removed: 2 moves, wrong position) | `72f1344` |
-| 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | `72f1344` |
-| 22 | TH-01 | 2 | **CONFIRMED** | docs only; the claim is true after THB-01 but its stated reason never was | `eaa9a45` |
-| 23 | TH-02 | 2 | **CONFIRMED** | docs only; 4 sites, no code path touched (perft(7) 1,355,253, suite 80) | `18fb481` |
-| 24 | TH-05 | 2 | **CONFIRMED** | default workers 2 -> 1; node counts now reproducible run to run (467/3,420/23,635 three for three vs 786/807/792 at 2 workers) | `c1d0ac2` |
-| 25 | TH-03 | 2 | **CONFIRMED** | PV replay: 9/9 plies legal, 0 repetitions, terminal result -1; perft(7) 1,355,253 unchanged | `a7a4699` |
-| 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | `080916f` |
-| 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | `d298404` |
-| 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | `713e188` |
-| 29 | TH-19 | 3 | **CONFIRMED** | in-process repeats 757,431/839,298/845,107/1,345,672/795,066 -> 757,431 x5 with th_clear_history; bench_workers prints 757,431 not '1M' | `5ab4df8` |
-| 30 | TH-18 | 3 | **CONFIRMED** | 9 pinned cases green; sensitivity measured: values catch 0 of 5 planted mutations, node counts catch 4 of 5 | `e2792a4` |
-| 31 | TH-20 | 3 | **CONFIRMED** | catches 5 of 5 planted mutations (vs 0 of 5 for TH-18's value pin); deterministic, digest 651da0519b02a4b7 / 6,476,533 nodes, ~2s | `0b26df1` |
-| 32 | TH-22 | 3 | **CONFIRMED** | 20 of 20 cdef symbols now have a contract assertion (5 previously untouched); catches 4 of 4 planted cdef errors | `ebf9491` |
-| 33 | TH-28 | 3 | **CONFIRMED** | both directions pinned; a build with a sound non-terminal horizon fails it | `7d410b4` |
-| 34 | TH-30 | 3 | **CONFIRMED** | keys asserted to differ, not values; a no-op th_seed fails it | `7d410b4` |
-| 35 | TH-27 | 3 | **CONFIRMED** | workers 1/2/4 all give 29991 + b4c2 at d9 and 0 at d8; helper-depth mutation passes (the budget guard absorbs it) | `7d410b4` |
-| 36 | TH-32 | 3 | **CONFIRMED** | null-hypothesis calibration: identical builds measure +0.4% / -0.6% against 1.1-1.2% spread, both reported NULL; noise floor ~1% | `dd9aa78` |
-| 37 | TH-31 | 3 | **CONFIRMED** | contract pinned: counter unchanged across th_tt_init/th_seed and across perft(5)=16,021; no reset added | `47cca17` |
-| 38 | TH-34 | 3 | **CONFIRMED** | win branch snd=1 at d9/d11, negative branch snd=0 at d8/10/12/14 (assertion gated accordingly) | `4b8c511` |
-| 39 | TH-35 | 3 | **CONFIRMED** | d1c2 now reports -29990 with snd 2 (SND_UB); all five quiet moves snd 0 | `4b8c511` |
-| 40 | TH-24 | 3 | **CONFIRMED** | walk now starts from all 5 oracle roots (was 1); +0.2s | `f6070ce` |
-| 41 | TH-23 | 3 | **CONFIRMED** | 94,624 comparisons, 0 mismatches; catches 3 of 3 planted geometry bugs | `f6070ce` |
-| 42 | TH-26 | 3 | **CONFIRMED** | resume, --fresh and build-mismatch paths all pinned by subprocess | `a064fd6` |
-| 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | `a064fd6` |
-| 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | `d0e1350` |
-| 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | `94ea4f2` |
-| 46 | TH-08 | 4 | **CONFIRMED** | +4.04% solve d14, +3.69/+3.93% hunt d16 vs a 0.2-0.4% control; NULL on drop-heavy; node-identical | `51a3442` |
-| 47 | TH-09 | 4 | **CONFIRMED** | +5.24% solve d14, +5.56/+5.15% hunt d16, +6.06% drop-heavy vs 0.0-0.8% controls; perft +1.00% (reported 1.071x); node-identical | `d6cf665` |
-| 48 | TH-10 | 4 | **CONFIRMED** | +7.92% solve d14, +7.44/+7.47% hunt d16, +3.78% drop-heavy, perft +0.34% (no regression); KEY_PARANOIA clean over 123M nodes incl. SMP | `28940f1` |
-| 49 | TH-12 | 4 | **CONFIRMED** | +10.16% perft(7), +39.56% drop-heavy perft, +2.53% solve d14, +2.95% hunt d16 vs controls under 0.4%; node-identical | `bcdb61a` |
-| 50 | TH-11 | 4 | **CONFIRMED** | perft +28.46% start, +110.83% drop-heavy; inside search -0.78%/-0.68% so shipped OFF there; perft equivalence checked on 8 positions incl. 3 promoted-mao | `44fce7b` |
-| 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | `290c749` |
-| 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | `2556151` |
-| 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | `b4526f3` |
-| 54 | TH-16 (class B) | 5 | **KEPT-ON-NULL** | nodes +3.04% on the frozen suite (rows -5.63% to +7.28%, tie-break noise); time +8.15/+22.85/+7.91% on three hunts, -3.09% on mao-check perft; 74,702 positions move-set-identical to the Python engine | `92d5bab` |
-| 55 | TH-13 | 5 | **CONFIRMED** | 4 of 200 root flags upgraded, 0 value changes, nodes exactly unchanged at depth 8 and -0.01% at most on the deeper suite | `fd0affc` |
-| 56 | TH-17 | 5 | **REJECTED** | regression suite -11.21% at weight 512, but the deep hunts go +13.12/+15.17/+19.33% at d14/16/18 and +70.02% on the Black d18 hunt | `c45b722` |
-| 57 | TH-39 | 5 | **CONFIRMED** | node-optimal size moves with depth (2^20 at d16, 2^24 at d18); 2^26 is 14.9% full at d18, so the default is kept for the depth-20+ runs it exists for | `8052e7a` |
-| 58 | TH-37 | 6 | **CONFIRMED** | plies 1-8 reproduced exactly and independently (2,036,092 cumulative, no hashing); growth ~6/ply bending to 5.09 by ply 10 | `f2982a3` |
-| 59 | TH-36 | 6 | **BLOCKED** | prototype returns a wrong DISPROVED on the recorded mate in 9, so none of its diagnostics can be trusted; shipped as groundwork with a strict xfail | `5c98bb6` |
-| 60 | TH-38 | 6 | **CLOSED PRE-MEASUREMENT** | no material reduction in crazyhouse, so no shrinking axis; terminals are 0.03-0.16% of positions and grow 6x/ply like everything else; cannot label DRAW | `ed382d2` |
-| 61 | TH-45 | 7 | **CONFIRMED** | browser-verified: black start gives 1...d3d2 / 2.a2a3, white start 1.a2a3 / d3d2 | `2064f92` |
-| 62 | TH-46 | 7 | **CONFIRMED** | browser-verified: banner, king-square highlight, and c1b3+ in the moves table | `2064f92` |
-| 63 | TH-47 | 7 | **CONFIRMED** | hardcoded type kept as the safer choice; .svg suffix now required, so it is provably correct | `2064f92` |
+| 1 | THB-01 | 0 | **CONFIRMED** | fix costs nothing on the bounds path: start-position negative hunt d16 White 9,913,857 -> 9,616,663 nodes (-3.0%), Black 1,824,606 -> 1,791,866 (-1.8%); repro position d13 8,279,609 -> 8,988,304 (+8.6%) | `4b2fea1` |
+| 2 | THB-02 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | `92d50ec` |
+| 3 | THB-03 | 1 | **CONFIRMED** | parse-time rejection; no node-count effect (perft(7) 1,355,253 unchanged) | `f0c9ffb` |
+| 4 | THB-05 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; whole-suite cost of validating every to_c call is 4.63s -> 4.68s (noise) | `8299c65` |
+| 5 | THB-04 | 1 | **CONFIRMED** | perft(7) 1,355,253 unchanged; guard is a no-op on legal input (no king capture is generated from a validated position) | `72bcc55` |
+| 6 | THB-06 | 1 | **CONFIRMED** | parse-time rejection; perft(7) 1,355,253 unchanged | `08ca8eb` |
+| 7 | TH-21 | 3 | **CONFIRMED** | coverage; suite 59 -> 61 tests, +0.0s | `885669e` |
+| 8 | THB-07 | 1 | **CONFIRMED** | foreign-rule dump: rc 0 -> -3; header 24 -> 32 bytes, so pre-existing dumps are invalidated by design | `3f5113b` |
+| 9 | THB-08 | 1 | **CONFIRMED** | failed save: silent exit-0 -> WARNING + intact previous dump; perft(7) 1,355,253 unchanged | `55cd265` |
+| 10 | THB-10 | 1 | **CONFIRMED** | depth 0 and -5 now clamp to 1; repo DB had 0 rows to clean (4 rows, depths 8/14) | `09e1b17` |
+| 11 | THB-09 | 1 | **CONFIRMED** | unproven rows no longer stored; build_book 8 1 keeps 0 of 7 visited (nothing that shallow is proven) | `804931c` |
+| 12 | TH-41 | 1 | **CONFIRMED** | labelling only; no engine or node-count effect | `9ab8c06` |
+| 13 | TH-42 | 1 | **CONFIRMED** | cache namespace now moves with the engine: editing #define MATE moved it 3697319324787062899 -> 8643824827813915791 (was: unchanged) | `c0a10a7` |
+| 14 | TH-40 | 1 | **CONFIRMED** | mirrored pair now reports snd 2 vs 1 (was 1 vs 1); cache namespace moves automatically via TH-42 | `df08006` |
+| 15 | THB-11 | 1 | **CONFIRMED** | contended trivial request: unbounded wait -> 503 after 20s; GUI depth cap 22 -> 16 on measured cost (d16 10.25s, d18 98.77s cold) | `f8a45ed` |
+| 16 | TH-44 | 1 | **CONFIRMED** | planted IsADirectoryError: absolute path in a 400 body -> 500 'internal error', path only on stderr | `8a87d45` |
+| 17 | TH-43 | 1 | **CONFIRMED** | node-identical (9,616,663 hunt d16 and 1,319,149 solve d14 on both arms); time x0.993/x1.000, inside spread | `6adb911` |
+| 18 | THB-15 | 1 | **CONFIRMED** | flag on: import now raises; divergence Python 6/36/274/2181/19317 vs C 6/33/241/1855/16021 | `8edae02` |
+| 19 | THB-14 | 1 | **CONFIRMED** | flags-only edit: dylib unchanged (sha1 4a7c8c7f) -> rebuilt (afeba22c -> 9d16118d) | `e1cb624` |
+| 20 | THB-12 | 1 | **CONFIRMED** | browser-verified: two unawaited clicks record 1 move, not 2 (guard removed: 2 moves, wrong position) | `af9dbc6` |
+| 21 | THB-13 | 1 | **CONFIRMED** | browser-verified: F~ then c1 builds fuwk/3p/P3/KWF~F[-] w; palette 11 -> 17 entries | `af9dbc6` |
+| 22 | TH-01 | 2 | **CONFIRMED** | docs only; the claim is true after THB-01 but its stated reason never was | `c9e589f` |
+| 23 | TH-02 | 2 | **CONFIRMED** | docs only; 4 sites, no code path touched (perft(7) 1,355,253, suite 80) | `4734fc2` |
+| 24 | TH-05 | 2 | **CONFIRMED** | default workers 2 -> 1; node counts now reproducible run to run (467/3,420/23,635 three for three vs 786/807/792 at 2 workers) | `f067123` |
+| 25 | TH-03 | 2 | **CONFIRMED** | PV replay: 9/9 plies legal, 0 repetitions, terminal result -1; perft(7) 1,355,253 unchanged | `3eea775` |
+| 26 | TH-06 | 2 | **CONFIRMED** | advice now on the negative branch; verified on normal exit, SIGINT (exit 130) and the win branch | `7301d70` |
+| 27 | TH-04 | 2 | **CONFIRMED** | docstring restated; depth-2 divide 5/6/6/3/6/7 = 33 now pinned (the artifact the claim assumed) | `7e5574d` |
+| 28 | TH-07 | 2 | **MOOT** | no-op: the comment already reads 'at most twice' after THB-05's refactor; 8 full / 11 under-full literals confirm the doc was the half to change | `802d613` |
+| 29 | TH-19 | 3 | **CONFIRMED** | in-process repeats 757,431/839,298/845,107/1,345,672/795,066 -> 757,431 x5 with th_clear_history; bench_workers prints 757,431 not '1M' | `85da37f` |
+| 30 | TH-18 | 3 | **CONFIRMED** | 9 pinned cases green; sensitivity measured: values catch 0 of 5 planted mutations, node counts catch 4 of 5 | `c6cf64c` |
+| 31 | TH-20 | 3 | **CONFIRMED** | catches 5 of 5 planted mutations (vs 0 of 5 for TH-18's value pin); deterministic, digest 651da0519b02a4b7 / 6,476,533 nodes, ~2s | `6cc9acb` |
+| 32 | TH-22 | 3 | **CONFIRMED** | 20 of 20 cdef symbols now have a contract assertion (5 previously untouched); catches 4 of 4 planted cdef errors | `0916b41` |
+| 33 | TH-28 | 3 | **CONFIRMED** | both directions pinned; a build with a sound non-terminal horizon fails it | `2533261` |
+| 34 | TH-30 | 3 | **CONFIRMED** | keys asserted to differ, not values; a no-op th_seed fails it | `2533261` |
+| 35 | TH-27 | 3 | **CONFIRMED** | workers 1/2/4 all give 29991 + b4c2 at d9 and 0 at d8; helper-depth mutation passes (the budget guard absorbs it) | `2533261` |
+| 36 | TH-32 | 3 | **CONFIRMED** | null-hypothesis calibration: identical builds measure +0.4% / -0.6% against 1.1-1.2% spread, both reported NULL; noise floor ~1% | `2e5bb87` |
+| 37 | TH-31 | 3 | **CONFIRMED** | contract pinned: counter unchanged across th_tt_init/th_seed and across perft(5)=16,021; no reset added | `f23550c` |
+| 38 | TH-34 | 3 | **CONFIRMED** | win branch snd=1 at d9/d11, negative branch snd=0 at d8/10/12/14 (assertion gated accordingly) | `014e8b6` |
+| 39 | TH-35 | 3 | **CONFIRMED** | d1c2 now reports -29990 with snd 2 (SND_UB); all five quiet moves snd 0 | `014e8b6` |
+| 40 | TH-24 | 3 | **CONFIRMED** | walk now starts from all 5 oracle roots (was 1); +0.2s | `ef9cb83` |
+| 41 | TH-23 | 3 | **CONFIRMED** | 94,624 comparisons, 0 mismatches; catches 3 of 3 planted geometry bugs | `ef9cb83` |
+| 42 | TH-26 | 3 | **CONFIRMED** | resume, --fresh and build-mismatch paths all pinned by subprocess | `4fa63d1` |
+| 43 | TH-33 | 3 | **CONFIRMED** | sub-problem 131,976 analytic == 131,976 brute force; headline 17,669,515,462,968 unchanged and pinned against RULES.md | `4fa63d1` |
+| 44 | TH-29 | 3 | **CONFIRMED** | proven draw found: 2K1/4/4/2k1[-] w -> v=0 snd=3 at depth 100 (117M nodes, 6.9s); unproven at 14 and 40 | `08cca0b` |
+| 45 | TH-25 | 3 | **REJECTED** | orbit adds 0 detections: identity perft catches 8 of 8 planted rules bugs, orbit-only catches 0 more | `e6c342b` |
+| 46 | TH-08 | 4 | **CONFIRMED** | +4.04% solve d14, +3.69/+3.93% hunt d16 vs a 0.2-0.4% control; NULL on drop-heavy; node-identical | `2f63cb4` |
+| 47 | TH-09 | 4 | **CONFIRMED** | +5.24% solve d14, +5.56/+5.15% hunt d16, +6.06% drop-heavy vs 0.0-0.8% controls; perft +1.00% (reported 1.071x); node-identical | `bcb9ec8` |
+| 48 | TH-10 | 4 | **CONFIRMED** | +7.92% solve d14, +7.44/+7.47% hunt d16, +3.78% drop-heavy, perft +0.34% (no regression); KEY_PARANOIA clean over 123M nodes incl. SMP | `4acea58` |
+| 49 | TH-12 | 4 | **CONFIRMED** | +10.16% perft(7), +39.56% drop-heavy perft, +2.53% solve d14, +2.95% hunt d16 vs controls under 0.4%; node-identical | `93ab223` |
+| 50 | TH-11 | 4 | **CONFIRMED** | perft +28.46% start, +110.83% drop-heavy; inside search -0.78%/-0.68% so shipped OFF there; perft equivalence checked on 8 positions incl. 3 promoted-mao | `6fbb581` |
+| 51 | TH-16 | 5 | **REJECTED** | Class A form: NULL on perft(7) (+0.41% vs 0.67% control) and -1.33% on the mao-check position it targets; the search form is node-changing (digest 811f304f1eef7998), so the item moves to tier 5 | `50494fa` |
+| 52 | TH-15 | 4 | **CLOSED PRE-MEASUREMENT** | ceiling is 0.6% of interior nodes (only 1.1% have a TT move at all), below the ~1% noise floor | `abf626c` |
+| 53 | TH-14 | 4 | **REJECTED** | profile ceiling 40.5% (pseudo_moves 24.5% + attacked 16.0%); the cheap flat-table form measures -1.78/-1.80/-8.52% on three of four workloads | `d0bfa0d` |
+| 54 | TH-16 (class B) | 5 | **KEPT-ON-NULL** | nodes +3.04% on the frozen suite (rows -5.63% to +7.28%, tie-break noise); time +8.15/+22.85/+7.91% on three hunts, -3.09% on mao-check perft; 74,702 positions move-set-identical to the Python engine | `8dc56c2` |
+| 55 | TH-13 | 5 | **CONFIRMED** | 4 of 200 root flags upgraded, 0 value changes, nodes exactly unchanged at depth 8 and -0.01% at most on the deeper suite | `22c729b` |
+| 56 | TH-17 | 5 | **REJECTED** | regression suite -11.21% at weight 512, but the deep hunts go +13.12/+15.17/+19.33% at d14/16/18 and +70.02% on the Black d18 hunt | `c0747ce` |
+| 57 | TH-39 | 5 | **CONFIRMED** | node-optimal size moves with depth (2^20 at d16, 2^24 at d18); 2^26 is 14.9% full at d18, so the default is kept for the depth-20+ runs it exists for | `3c5e385` |
+| 58 | TH-37 | 6 | **CONFIRMED** | plies 1-8 reproduced exactly and independently (2,036,092 cumulative, no hashing); growth ~6/ply bending to 5.09 by ply 10 | `38c9532` |
+| 59 | TH-36 | 6 | **BLOCKED** | prototype returns a wrong DISPROVED on the recorded mate in 9, so none of its diagnostics can be trusted; shipped as groundwork with a strict xfail | `0ce66b1` |
+| 60 | TH-38 | 6 | **CLOSED PRE-MEASUREMENT** | no material reduction in crazyhouse, so no shrinking axis; terminals are 0.03-0.16% of positions and grow 6x/ply like everything else; cannot label DRAW | `9efaa6a` |
+| 61 | TH-45 | 7 | **CONFIRMED** | browser-verified: black start gives 1...d3d2 / 2.a2a3, white start 1.a2a3 / d3d2 | `e534200` |
+| 62 | TH-46 | 7 | **CONFIRMED** | browser-verified: banner, king-square highlight, and c1b3+ in the moves table | `e534200` |
+| 63 | TH-47 | 7 | **CONFIRMED** | hardcoded type kept as the safer choice; .svg suffix now required, so it is provably correct | `e534200` |
 
 ### THB-01 · TT cutoff broke the ply-budget contract
 
@@ -338,7 +338,7 @@ the book: `build_book.py 8 1` visits 7 positions near the start and stores
 proven-of-visited rather than visited, so the book cannot look bigger than it is.
 
 **A regression I introduced, found here and fixed here**: moving the engine and
-cache setup out of `server.py`'s import (commit `3004d6f`) broke
+cache setup out of `server.py`'s import (commit `787ee27`) broke
 `scripts/build_book.py`, which reaches `analyze()` by import and got
 `db is None`. Nothing covered it. It now calls `init()`, takes a database path
 so a test need not touch the repo's, and has a smoke test.
@@ -549,7 +549,7 @@ captured promoted piece returns to hand as a **pawn**, so the flag decides which
 game is analysed. From `K3/4/2k1/2F~1[-] b`, `c2c1` yields `...[p] w`; without
 the marker the same move yields `...[f] w`.
 
-Landed in `72f1344`, the THB-12 commit, rather than in one of its own -- both
+Landed in `af9dbc6`, the THB-12 commit, rather than in one of its own -- both
 edits touch `index.html` and I committed them together. That is one logical
 change too many for a commit and is recorded here rather than repaired with
 a revert-and-reapply pair that would leave the same history.
@@ -562,7 +562,7 @@ promoted ones rendering a `~`, and selecting `F~` then clicking c1 builds
 
 ## Tier 1 closing gate
 
-Whole batch re-verified at `72f1344`, after all 19 items:
+Whole batch re-verified at `af9dbc6`, after all 19 items:
 
 | gate | result |
 |---|---|
@@ -1403,11 +1403,11 @@ starts from the ceiling rather than from a guess.
 
 ## Tier 4 closing gate and cumulative measurement
 
-Gate at `b4526f3`: 106 fast tests + 2 slow, `perft(7) = 1,355,253`, regression
+Gate at `d0bfa0d`: 106 fast tests + 2 slow, `perft(7) = 1,355,253`, regression
 digest `651da0519b02a4b7` unchanged, all three published proofs at their exact
 distances, tree clean.
 
-**Campaign start (`9a4e930`) to now**, same-build control arm in the same
+**Campaign start (`4e22dcd`) to now**, same-build control arm in the same
 interleaved session, 9 repeats, fresh process each:
 
 | workload | control | tier-4 start | **now** |
@@ -1878,7 +1878,7 @@ Node counts on the negative hunts at the end of the campaign: d12 171,059 /
 
 ## Total measured gain
 
-Campaign start (`9a4e930`) to the end of tier 4 (`b4526f3`), same-build control
+Campaign start (`4e22dcd`) to the end of tier 4 (`d0bfa0d`), same-build control
 arm, 9 repeats, fresh process each:
 
 | workload | control | gain |

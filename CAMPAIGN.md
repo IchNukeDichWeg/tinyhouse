@@ -22,11 +22,11 @@ backlog in 62 = confirmed 55 + rejected 4 + closed-pre-measurement 2 + moot 1
 TH-36 was BLOCKED at first pass and reopened: the df-pn prototype was fixed,
 validated against the alpha-beta engine, and the gating milestone was run.
 
-## Baseline gate (2026-08-22, at `d8d951f`)
+## Baseline gate (2026-08-22, at `1d31531`)
 
 | Gate | Result |
 |---|---|
-| `git status --short` | clean (one tooling commit was needed: `d8d951f`) |
+| `git status --short` | clean (one tooling commit was needed: `1d31531`) |
 | `pytest -q` | 43 passed |
 | `perft(7)` from start | 1,355,253 |
 | `pgrep solve_hunt\|server.py` | empty |
