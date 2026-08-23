@@ -76,6 +76,8 @@ int th_solve_mt(THPos *p, int depth, int workers, uint16_t *bestmove, int *snd);
 int th_mate_hunt_mt(THPos *p, int depth, int color, int workers, uint16_t *bestmove, int *snd);
 int th_mate_hunt(THPos *p, int depth, int color, uint16_t *bestmove);
 int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values, int *out_snd);
+int th_dfpn_init(int log2_entries);
+int th_dfpn(THPos *p, int attacker, uint64_t node_cap, int depth_limit, int use_twins, uint64_t *stats);
 """)
 lib = ffi.dlopen(str(_LIB))
 lib.th_init()

@@ -1058,13 +1058,20 @@ close it. Gate on the milestone: unbounded df-pn from the start with a node cap,
 watching root `dn`. Falling means viable, plateauing means no. **A one-day answer to a
 question the repo has been carrying since phase 4.**
 
-**Run, and the answer is no for this formulation.** `scripts/dfpn.py` is
-validated (178 agreements against the alpha-beta engine, 0 disagreements; the
-recorded mate in 9 proven in 2,770 nodes) and it resolves 1 of 6 root moves in
-2.4M nodes from the start, with three disproof numbers frozen and two rising.
-The conservative graph-history rule withholds **39%** of everything it computes.
-A C implementation with Kishimoto-Muller twins is the next step, and that 39% is
-the number it would attack.
+**Run, and the answer is no -- with the C engine and twins, not just the
+prototype.** `th_dfpn` in `tinyhouse.c` implements df-pn with Kishimoto-Muller
+twin entries and is validated against the alpha-beta engine over **3,960
+comparisons with zero disagreements** (plus 90 against the Python reference and
+114 twins-on/twins-off differentials). At 96M nodes the start position resolves
+**1 of 6** root moves and the disproof numbers **rise**.
+
+**Twins are refuted as the missing piece.** Widening the conditioning set from 1
+to 8 keys takes the withheld fraction from 13.9% to **exactly 0.0%** -- the GHI
+store problem disappears -- and the root disproof number gets slightly *worse*
+(8,397 -> 10,700). The bottleneck is the size of the search: **62% of nodes at
+96M are repetition leaves**. What the engine does deliver is a positive
+**disproof** that White has any forced win after `1.Fd1-c2`, which alpha-beta
+structurally cannot produce.
 
 **Highest value**: Lane 2 — the solver is the product and it has no automated
 coverage at all. **Cheapest**: Lane 3, about ten lines for three confirmed bugs.

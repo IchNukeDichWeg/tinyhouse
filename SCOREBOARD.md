@@ -1894,3 +1894,69 @@ nodes to depth**, the latter a one-off side effect of THB-01's soundness fix.
 Tier 5 added TH-16, which is +8.15% and +22.85% on the two start-position hunts
 but costs 3.04% more nodes on the regression suite; it is not folded into the
 figures above, because those are node-identical and this one is not.
+
+### TH-36 (second pass) · the C df-pn engine with Kishimoto-Muller twin entries
+
+`th_dfpn` / `th_dfpn_init` in `tinyhouse.c`, sharing the movegen, make/unmake,
+Zobrist keys and `key_after` with the alpha-beta engine. `scripts/dfpn.py`
+stays as the slow Python reference the C is checked against.
+
+**Twin entries, and the measurement that chose their shape.** A value that used
+a repetition is only valid on paths still containing the ancestor it repeated.
+The conservative rule throws every such value away. A twin instead stores the
+value *with* its conditioning ancestors and reuses it when those are on the
+current path. Width was measured before it was chosen: on a 200k-node Python
+sample, 90.0% of path-dependent values depended on exactly one ancestor, 9.9%
+on two, 0.08% on three. **That shallow sample does not extrapolate** -- at 48M
+C nodes, 29% exceed two.
+
+**Validation. Three independent implementations, zero disagreements anywhere.**
+
+| check | comparisons | disagreements |
+|---|---|---|
+| C df-pn vs `th_mate_hunt`, 400 positions x depths 4/6/8/10/12 x both colours | **3,960** | **0** |
+| C df-pn vs `th_mate_hunt`, 60 positions x depths 4/6/8/10 (twins on and off) | 480 x2 | 0 |
+| C df-pn vs the Python reference | 90 | 0 |
+| twins on vs twins off, unbounded | 114 resolved | **0 verdict differences** |
+
+The cross-check works because with a depth limit d, df-pn answers exactly the
+question `th_mate_hunt(d)` answers, and the two engines share no search code.
+
+**Speed.** The recorded mate in 13 is proven at depth limit 13 in **0.11s**;
+the Python reference could not prove it at all within 257k nodes and 14s. The
+mate in 9 takes 2,806 nodes with twins and 2,770 without.
+
+**The twin-width sweep, which is the result that matters.** Start position,
+White, 12M nodes, twins on:
+
+| `DF_DEPS_MAX` | withheld | root dn | twin hits |
+|---|---|---|---|
+| 1 | 13.9% | 8,397 | 1,464,788 |
+| 2 (shipped) | 2.1% | 9,529 | 902,735 |
+| 4 | 0.1% | 10,960 | 739,986 |
+| **8** | **0.0%** | 10,700 | 728,371 |
+
+At width 8 **the GHI store problem is gone entirely** -- nothing is withheld --
+and the disproof number is *worse* than at width 1. Twins do exactly what they
+are supposed to do, and it changes nothing.
+
+**The gating milestone, C engine, twins on, up to 96M nodes:**
+
+| nodes | resolved | rep leaves | withheld | a1b2 | a2a3 | b1b2 | c1b3 | c1d3 | d1c2 |
+|---|---|---|---|---|---|---|---|---|---|
+| 12M | 1/6 | 458,133 | 287,035 | 1,337 | 1,480 | 2,005 | 2,520 | 2,180 | **DISPROVED** |
+| 24M | 1/6 | 3,712,943 | 3,082,767 | 1,619 | 1,615 | 2,653 | 3,345 | 3,066 | **DISPROVED** |
+| 48M | 1/6 | 17,682,792 | 13,783,272 | 2,315 | 2,179 | 2,408 | 1,684 | 4,285 | **DISPROVED** |
+| 96M | 1/6 | 59,269,335 | 44,172,466 | 1,251 | 2,237 | 4,536 | 3,288 | 5,242 | **DISPROVED** |
+
+**Verdict: NO, and now for a reason rather than for lack of an engine.** The
+disproof numbers rise with more search, one root move of six resolves, and
+**62% of all nodes are repetition leaves** at 96M. The backlog expected
+Kishimoto-Muller twins to be the missing piece; they are built, they work, they
+eliminate withholding completely at width 8, and the answer does not move.
+
+**What did come out of it**: `d1c2` is DISPROVED -- White has no forced win
+after `1.Fd1-c2` -- which is a positive disproof of a win, the thing the
+alpha-beta engine structurally cannot produce because its horizon returns an
+unsound 0. That is a real, new, independently cross-checked result about this
+game.

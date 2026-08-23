@@ -30,9 +30,17 @@ Measured: **178 agreements, 0 disagreements** over depths 4, 6 and 8. On the
 recorded mate in 9 it proves in 1,863 nodes depth-limited and 2,770 unbounded,
 against the ~1,949 the backlog reported for a depth-limited prototype.
 
-  scripts/dfpn.py mate9          the validation case
-  scripts/dfpn.py cross [N]      agree with the alpha-beta engine on N positions
-  scripts/dfpn.py milestone [N]  root dn against nodes spent, from the start
+This module is the REFERENCE implementation. The shipped engine is the C one in
+tinyhouse.c (th_dfpn), which adds Kishimoto-Muller twin entries; this exists to
+cross-check it, and being slow and simple is the point.
+
+  scripts/dfpn.py mate9          the validation case (Python)
+  scripts/dfpn.py cross [N]      Python df-pn vs the alpha-beta engine
+  scripts/dfpn.py milestone [N]  root dn against nodes spent (Python)
+  scripts/dfpn.py ccross [N]     C df-pn vs the alpha-beta engine
+  scripts/dfpn.py cpy [N]        C df-pn vs this Python reference
+  scripts/dfpn.py ctwins [CAP]   twin entries on vs off
+  scripts/dfpn.py cmilestone [CAP] the gating milestone, C engine
 """
 import sys
 import time
@@ -235,6 +243,139 @@ if __name__ == "__main__":
             print(f"    {label}")
             print(f"      {st:11s} pn={fmt(pn)} dn={fmt(dn)}  nodes {d.nodes:>9,}  tt {len(d.tt):>9,}"
                   f"  path-dependent {d.unstorable:>9,}  {time.perf_counter()-t0:6.1f}s")
+    elif mode in ("ccross", "cpy", "ctwins", "cmilestone"):
+        import engine_c as E
+
+        st = E.ffi.new("uint64_t[12]")
+
+        def cdfpn(tfen, atk, cap=4_000_000, lim=-1, twins=1, tt=22):
+            E.lib.th_dfpn_init(tt)
+            v = E.lib.th_dfpn(E.to_c(T.Position.from_tfen(tfen)), atk, cap, lim, twins, st)
+            return v, [st[i] for i in range(10)]
+
+        def sample(n, seed=17):
+            import random
+            random.seed(seed)
+            out = []
+            while len(out) < n:
+                p = T.Position.start()
+                for _ in range(random.randrange(1, 14)):
+                    ms = p.legal_moves()
+                    if not ms:
+                        break
+                    p.make(random.choice(ms))
+                else:
+                    if p.legal_moves():
+                        out.append(p.tfen())
+            return out
+
+        if mode == "ccross":
+            n_pos = int(sys.argv[2]) if len(sys.argv) > 2 else 60
+            depths = [int(x) for x in (sys.argv[3].split(",") if len(sys.argv) > 3 else ["4", "6", "8", "10"])]
+            bm, snd = E.ffi.new("uint16_t *"), E.ffi.new("int *")
+            agree = dis = capped = 0
+            bad = []
+            t0 = time.perf_counter()
+            for tfen in sample(n_pos):
+                for d in depths:
+                    for atk in (0, 1):
+                        E.lib.th_tt_init(20)
+                        E.lib.th_clear_history()
+                        v = E.lib.th_mate_hunt_mt(E.to_c(T.Position.from_tfen(tfen)), d, atk, 1, bm, snd)
+                        ab = v > 29000
+                        r, s2 = cdfpn(tfen, atk, cap=4_000_000, lim=d)
+                        if r == 0:
+                            capped += 1
+                            continue
+                        if (r == 1) == ab:
+                            agree += 1
+                        else:
+                            dis += 1
+                            bad.append((tfen, d, atk, v, r))
+            print(f"  C df-pn vs alpha-beta: {n_pos} positions x depths {depths} x both "
+                  f"colours, {time.perf_counter() - t0:.0f}s")
+            print(f"    agree {agree}   DISAGREE {dis}   node cap hit {capped}")
+            for b in bad[:5]:
+                print(f"      {b}")
+            sys.exit(1 if dis else 0)
+
+        if mode == "cpy":
+            n_pos = int(sys.argv[2]) if len(sys.argv) > 2 else 25
+            agree = dis = capped = 0
+            bad = []
+            t0 = time.perf_counter()
+            for tfen in sample(n_pos, seed=23):
+                for d in (4, 6):
+                    for atk in (0, 1):
+                        r, _ = cdfpn(tfen, atk, cap=2_000_000, lim=d)
+                        f = DFPN(attacker=atk, node_cap=200_000, depth_limit=d)
+                        pn, dn = f.run(T.Position.from_tfen(tfen))
+                        py = 1 if pn == 0 else (-1 if dn == 0 else 0)
+                        if r == 0 or py == 0:
+                            capped += 1
+                        elif r == py:
+                            agree += 1
+                        else:
+                            dis += 1
+                            bad.append((tfen, d, atk, r, py))
+            print(f"  C df-pn vs the Python reference: {n_pos} positions, "
+                  f"{time.perf_counter() - t0:.0f}s")
+            print(f"    agree {agree}   DISAGREE {dis}   either capped {capped}")
+            for b in bad[:5]:
+                print(f"      {b}")
+            sys.exit(1 if dis else 0)
+
+        if mode == "ctwins":
+            cap = int(sys.argv[2]) if len(sys.argv) > 2 else 4_000_000
+            print(f"  Kishimoto-Muller twin entries, on vs off. Cap {cap:,} nodes.\n")
+            work = [("recorded mate in 9", "fuwk/3p/P1F1/KWU1[-] b", 1, -1),
+                    ("recorded mate in 13", "1uwk/1f1p/PW2/K1UF[-] w", 0, 13),
+                    ("no White win after 1.Fd1-c2", "fuwk/3p/P1F1/KWU1[-] b", 0, -1),
+                    ("start, White", "fuwk/3p/P3/KWUF[-] w", 0, -1)]
+            print(f"  {'case':30s} {'twins':>6s} {'result':>10s} {'nodes':>12s} "
+                  f"{'withheld':>10s} {'twin store':>11s} {'twin hits':>11s}")
+            for label, tfen, atk, lim in work:
+                for tw in (0, 1):
+                    t0 = time.perf_counter()
+                    r, s2 = cdfpn(tfen, atk, cap=cap, lim=lim, twins=tw)
+                    lab = {1: "PROVED", -1: "DISPROVED", 0: "open"}[r]
+                    print(f"  {label:30s} {'on' if tw else 'off':>6s} {lab:>10s} "
+                          f"{s2[0]:>12,} {s2[7]:>10,} {s2[4]:>11,} {s2[5]:>11,}"
+                          f"   {time.perf_counter() - t0:5.1f}s", flush=True)
+                print()
+            sys.exit(0)
+
+        cap = int(sys.argv[2]) if len(sys.argv) > 2 else 20_000_000
+        who = T.WHITE if len(sys.argv) <= 3 else int(sys.argv[3])
+        pos = T.Position.start()
+        name = "White" if who == T.WHITE else "Black"
+        roots = sorted(pos.legal_moves(), key=T.move_str)
+        print(f"  milestone (C engine, twins on): df-pn on '{name} forces a win' "
+              f"from {pos.tfen()}\n")
+        print(f"  {'nodes':>12s} {'resolved':>9s} {'rep leaves':>12s} {'withheld':>10s} "
+              f"{'twin hits':>12s}   " + "".join(f"{T.move_str(m):>11s}" for m in roots))
+        for budget in (cap // 8, cap // 4, cap // 2, cap):
+            E.lib.th_dfpn_init(24)
+            v = E.lib.th_dfpn(E.to_c(pos), who, budget, -1, 1, st)
+            s2 = [st[i] for i in range(10)]
+            cells, done = [], 0
+            p2 = T.Position.start()
+            for m in roots:
+                p2.make(m)
+                r2, s3 = cdfpn(p2.tfen(), who, cap=budget // 6, lim=-1, tt=22)
+                p2.unmake()
+                if r2 == -1:
+                    cells.append(f"{'DISPROVED':>11s}"); done += 1
+                elif r2 == 1:
+                    cells.append(f"{'PROVED':>11s}"); done += 1
+                else:
+                    cells.append(f"{s3[2]:>11,}")
+            print(f"  {s2[0]:>12,} {done:>6d}/{len(roots)} {s2[3]:>12,} {s2[7]:>10,} "
+                  f"{s2[5]:>12,}   " + "".join(cells), flush=True)
+        print("\n  A dn column that falls is a disproof converging; one that sits still"
+              "\n  while the table fills is one that is not.")
+        sys.exit(0)
+
     elif mode == "cross":
         # The real validation. With a depth limit d this answers exactly the
         # question th_mate_hunt(d) answers, so the two engines must agree

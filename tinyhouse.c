@@ -1081,6 +1081,339 @@ int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values, int
     return n;
 }
 
+/* ------------------------------------------------------------------- df-pn
+ * A second engine, because the first one structurally cannot prove a draw: its
+ * horizon returns an unsound 0, so "not a win" is the absence of a proof rather
+ * than a positive result. df-pn has no horizon - every leaf is a terminal or a
+ * repetition - so a disproof is something it can produce directly.
+ *
+ * Formulation: phi/delta (Nagai), uniform across OR and AND nodes.
+ *   phi(n) = min over children of delta(c)
+ *   delta(n) = sum over children of phi(c)
+ * An OR node is the attacker to move, an AND node the defender.
+ *
+ * KISHIMOTO-MULLER TWIN ENTRIES, which is what this file is really for.
+ * A value that used a repetition is path-dependent: it is only valid on paths
+ * that still contain the ancestor that was repeated. The conservative rule -
+ * the one tinyhouse.c uses on its own store side - throws every such value
+ * away, and the Python prototype measured that at 39% of everything computed.
+ * A twin entry instead STORES the value together with the ancestors it is
+ * conditioned on, and reuses it whenever those ancestors are on the current
+ * path. Two conditioning slots, because the dependency-set size was measured
+ * before this was written: 90.0% of withheld values depend on exactly one
+ * ancestor, 9.9% on two, 0.08% on three. Two slots therefore recover 99.9% of
+ * them; three or more are still withheld.
+ *
+ * A dependency on the node ITSELF never escapes it: a descendant that repeats
+ * this node depends on this node being an ancestor, which it always is
+ * whenever this node is being evaluated. So the node's own key is dropped from
+ * the set on the way out.
+ *
+ * SOUNDNESS, stated exactly, because this is the part that rests on
+ * measurement rather than on proof. A twin is reused when its conditioning
+ * ancestors are PRESENT on the current path. That does not account for a
+ * different path carrying EXTRA ancestors, which would create repetitions the
+ * stored value never saw. No counterexample was found -- 3,960 agreements with
+ * th_mate_hunt over 400 positions at five depths, 90 with the Python reference
+ * in scripts/dfpn.py, and 114 unbounded twins-on against twins-off differentials,
+ * with zero disagreements anywhere -- but absence of a counterexample is not a
+ * proof, and twins-off is the arm that is sound by construction. th_dfpn takes
+ * use_twins explicitly for that reason: there is no hidden default, and any
+ * claim that matters should be re-run with it off.
+ *
+ * AND THE MEASURED VERDICT: twins work and do not help. Widening DF_DEPS_MAX
+ * from 1 to 8 drives the withheld fraction from 13.9% to exactly 0.0% at 12M
+ * nodes from the start -- the GHI store problem disappears completely -- while
+ * the root disproof number gets WORSE, 8,397 to 10,700. At 96M nodes the start
+ * position still resolves 1 of its 6 root moves and the disproof numbers rise.
+ * The bottleneck is the size of the search, not the transposition table, so the
+ * backlog's expectation that twins were the missing piece is refuted.
+ *
+ * The per-ply child cache below is not an optimisation. df-pn advances by
+ * re-reading a child after searching it, so a child whose value went nowhere
+ * reads back as the (1,1) initial estimate, gets selected again, and the search
+ * never terminates. With twins most values now reach the table, but a withheld
+ * one still needs somewhere to live for the duration of its parent's loop. */
+
+#define DF_INF 0xFFFFFFFFu
+#define DFPN_MAXPLY 256
+#define DFPN_MAXMOVES 128
+#define DFPATH_SLOTS 2048
+
+/* How many conditioning ancestors a twin entry can carry. Measured before
+ * choosing it: on a 200k-node sample from the start, 90.0% of path-dependent
+ * values depended on exactly one ancestor, 9.9% on two and 0.08% on three --
+ * but that shallow sample does NOT extrapolate, and at 48M nodes 29% of values
+ * exceed two. Widening is one constant, so it is measurable rather than
+ * argued. */
+#define DF_DEPS_MAX 2
+
+typedef struct { uint32_t phi, delta; } PD;
+typedef struct { uint64_t key, c[DF_DEPS_MAX]; uint32_t phi, delta; } DFEntry;
+/* n > DF_DEPS_MAX means "more dependencies than a twin can hold": withheld */
+typedef struct { uint64_t k[DF_DEPS_MAX]; int n; } Deps;
+
+static DFEntry *dftt = 0;
+static uint64_t dftt_mask = 0;
+static uint64_t zob_dfrem[DFPN_MAXPLY + 1];
+
+static _Thread_local uint64_t df_pathset[DFPATH_SLOTS];
+static _Thread_local uint32_t df_cphi[DFPN_MAXPLY][DFPN_MAXMOVES];
+static _Thread_local uint32_t df_cdel[DFPN_MAXPLY][DFPN_MAXMOVES];
+static _Thread_local uint8_t df_chave[DFPN_MAXPLY][DFPN_MAXMOVES];
+
+static int df_attacker, df_use_twins, df_depth_limit, df_abort;
+static uint64_t df_nodes, df_cap;
+static uint64_t df_st_rep, df_st_withheld, df_st_twin_store, df_st_twin_hit,
+                df_st_plain_store, df_st_plycap;
+
+/* -- path membership, O(1). Linear probing with backward-shift deletion; keys
+ * on a path are distinct by construction, since a duplicate IS a repetition and
+ * is detected before the push. */
+static void pathset_add(uint64_t k) {
+    if (!k) k = 1;
+    uint64_t i = k & (DFPATH_SLOTS - 1);
+    while (df_pathset[i]) i = (i + 1) & (DFPATH_SLOTS - 1);
+    df_pathset[i] = k;
+}
+static int pathset_has(uint64_t k) {
+    if (!k) k = 1;
+    uint64_t i = k & (DFPATH_SLOTS - 1);
+    while (df_pathset[i]) {
+        if (df_pathset[i] == k) return 1;
+        i = (i + 1) & (DFPATH_SLOTS - 1);
+    }
+    return 0;
+}
+static void pathset_del(uint64_t k) {
+    if (!k) k = 1;
+    uint64_t i = k & (DFPATH_SLOTS - 1);
+    while (df_pathset[i] != k) i = (i + 1) & (DFPATH_SLOTS - 1);
+    uint64_t j = i;
+    for (;;) {
+        df_pathset[i] = 0;
+        for (;;) {
+            j = (j + 1) & (DFPATH_SLOTS - 1);
+            if (!df_pathset[j]) return;
+            uint64_t home = df_pathset[j] & (DFPATH_SLOTS - 1);
+            if (i <= j ? (home <= i || home > j) : (home <= i && home > j)) break;
+        }
+        df_pathset[i] = df_pathset[j];
+        i = j;
+    }
+}
+
+static void dep_add(Deps *d, uint64_t k) {
+    if (d->n > DF_DEPS_MAX) return;
+    for (int i = 0; i < d->n; i++) if (d->k[i] == k) return;
+    if (d->n == DF_DEPS_MAX) { d->n = DF_DEPS_MAX + 1; return; }
+    d->k[d->n++] = k;
+}
+static void dep_merge(Deps *d, const Deps *s) {
+    if (s->n == 0) return;
+    if (s->n > DF_DEPS_MAX) { d->n = DF_DEPS_MAX + 1; return; }
+    for (int i = 0; i < s->n; i++) dep_add(d, s->k[i]);
+}
+static void dep_drop(Deps *d, uint64_t k) {          /* the node's own key */
+    if (d->n > DF_DEPS_MAX) return;
+    for (int i = 0; i < d->n; i++)
+        if (d->k[i] == k) { d->k[i] = d->k[d->n - 1]; d->n--; return; }
+}
+
+static uint32_t sat_add(uint32_t a, uint32_t b) {
+    uint32_t s = a + b;
+    return s < a ? DF_INF : s;
+}
+
+int th_dfpn_init(int log2_entries) {
+    if (dftt) free(dftt);
+    uint64_t n = 1ULL << log2_entries;
+    dftt = calloc(n * 2, sizeof(DFEntry));       /* slot 0 plain, slot 1 twin */
+    dftt_mask = n - 1;
+    return dftt ? 0 : -1;
+}
+
+static int df_probe(uint64_t key, PD *out) {
+    if (!dftt) return 0;
+    DFEntry *e = &dftt[(key & dftt_mask) * 2];
+    if (e[0].key == key) { out->phi = e[0].phi; out->delta = e[0].delta; return 1; }
+    if (df_use_twins && e[1].key == key) {
+        for (int i = 0; i < DF_DEPS_MAX; i++)
+            if (e[1].c[i] && !pathset_has(e[1].c[i])) return 0;
+        df_st_twin_hit++;
+        out->phi = e[1].phi; out->delta = e[1].delta;
+        return 1;
+    }
+    return 0;
+}
+
+static void df_store(uint64_t key, PD v, const Deps *d) {
+    if (!dftt) return;
+    DFEntry *e = &dftt[(key & dftt_mask) * 2];
+    if (d->n == 0) {
+        df_st_plain_store++;
+        e[0].key = key;
+        for (int i = 0; i < DF_DEPS_MAX; i++) e[0].c[i] = 0;
+        e[0].phi = v.phi; e[0].delta = v.delta;
+    } else if (d->n <= DF_DEPS_MAX && df_use_twins) {
+        df_st_twin_store++;
+        e[1].key = key;
+        for (int i = 0; i < DF_DEPS_MAX; i++) e[1].c[i] = i < d->n ? d->k[i] : 0;
+        e[1].phi = v.phi; e[1].delta = v.delta;
+    } else {
+        df_st_withheld++;
+    }
+}
+
+static PD df_mid(THPos *p, uint32_t phi_th, uint32_t delta_th, int ply,
+                 uint64_t key, Deps *deps) {
+    PD r;
+    deps->n = 0;
+    if (++df_nodes > df_cap) { df_abort = 1; r.phi = 1; r.delta = 1; return r; }
+
+    int is_or = (p->stm == df_attacker);
+    uint16_t buf[DFPN_MAXMOVES];
+    int n = th_moves(p, buf);
+
+    /* A terminal is a terminal at the depth limit too: a mate reached exactly
+     * at the limit is a proof, not a failure. */
+    if (!n) {
+        int proved = ((th_in_check(p, p->stm) ? 1 - p->stm : p->stm) == df_attacker);
+        if (proved == is_or) { r.phi = 0; r.delta = DF_INF; }
+        else { r.phi = DF_INF; r.delta = 0; }
+        /* a terminal is path- and depth-independent, so it is stored under the
+         * plain key and is valid for every remaining-depth budget */
+        Deps none = {{0}, 0};
+        df_store(key, r, &none);
+        return r;
+    }
+    if (pathset_has(key)) {                       /* ancestor repetition: a draw */
+        df_st_rep++;
+        deps->k[0] = key; deps->n = 1;
+        if (is_or) { r.phi = DF_INF; r.delta = 0; } else { r.phi = 0; r.delta = DF_INF; }
+        return r;
+    }
+    if (df_depth_limit >= 0 && ply >= df_depth_limit) {
+        /* the attacker ran out of budget. Sound to store, because the TT key
+         * carries the REMAINING depth below - see tkey. */
+        if (is_or) { r.phi = DF_INF; r.delta = 0; } else { r.phi = 0; r.delta = DF_INF; }
+        return r;
+    }
+    if (ply >= DFPN_MAXPLY - 1) {
+        /* Absolute recursion cap. Unlike the depth limit this is a function of
+         * the PATH, not of anything in the key, so nothing derived from it may
+         * be stored: n = 3 is the "too many dependencies" state, which withholds.
+         * If df_st_plycap comes back 0 the cap never bound and no result was
+         * affected by it. */
+        df_st_plycap++;
+        deps->n = DF_DEPS_MAX + 1;
+        if (is_or) { r.phi = DF_INF; r.delta = 0; } else { r.phi = 0; r.delta = DF_INF; }
+        return r;
+    }
+
+    /* TT key. Under a depth limit the value of a node depends on how much
+     * budget is left, so the remaining depth is mixed in -- otherwise a value
+     * cut short at ply 9 would be reused at ply 3, where it is simply wrong.
+     * Unbounded (the mode the draw claim needs) this is the plain key. */
+    uint64_t tkey = df_depth_limit >= 0
+                  ? key ^ zob_dfrem[df_depth_limit - ply] : key;
+
+    pathset_add(key);
+    uint32_t *cphi = df_cphi[ply], *cdel = df_cdel[ply];
+    uint8_t *chave = df_chave[ply];
+    memset(chave, 0, (size_t)n);
+
+    uint32_t phi = DF_INF, delta = 0;
+    for (;;) {
+        int best = -1;
+        uint32_t best_cd = DF_INF, second_cd = DF_INF, best_cp = DF_INF;
+        uint64_t best_key = 0;
+        phi = DF_INF; delta = 0;
+        Deps round = {{0}, 0};
+        for (int i = 0; i < n; i++) {
+            uint64_t ck = key_after(p, buf[i], key);
+            uint32_t q, d;
+            if (pathset_has(ck)) {
+                /* a child repeating an ancestor is a draw on THIS path, checked
+                 * before the caches so the dependency is never lost */
+                Undo u; make(p, buf[i], &u);
+                int cor = (p->stm == df_attacker);
+                unmake(p, &u);
+                if (cor) { q = DF_INF; d = 0; } else { q = 0; d = DF_INF; }
+                dep_add(&round, ck);
+                df_st_rep++;      /* counted here: a repeating child is resolved
+                                   * in the scan and df_mid is never entered on it */
+            } else if (chave[i]) {
+                q = cphi[i]; d = cdel[i];
+            } else {
+                PD hit;
+                uint64_t ctk = df_depth_limit >= 0
+                             ? ck ^ zob_dfrem[df_depth_limit - ply - 1] : ck;
+                if (df_probe(ctk, &hit)) { q = hit.phi; d = hit.delta; }
+                else { q = 1; d = 1; }
+            }
+            if (d < phi) phi = d;
+            delta = sat_add(delta, q);
+            if (d < best_cd) { second_cd = best_cd; best_cd = d; best_cp = q; best = i; best_key = ck; }
+            else if (d < second_cd) second_cd = d;
+        }
+        dep_merge(deps, &round);
+        if (phi >= phi_th || delta >= delta_th || df_abort) break;
+
+        uint32_t c_phi_th = delta_th >= DF_INF ? DF_INF
+                          : (delta_th > delta - best_cp ? delta_th - (delta - best_cp) : 0);
+        uint32_t c_del_th = phi_th;
+        if (second_cd != DF_INF && second_cd + 1 < c_del_th) c_del_th = second_cd + 1;
+
+        Undo u;
+        make(p, buf[best], &u);
+        Deps cd = {{0}, 0};
+        PD cv = df_mid(p, c_phi_th, c_del_th, ply + 1, best_key, &cd);
+        unmake(p, &u);
+        cphi[best] = cv.phi; cdel[best] = cv.delta; chave[best] = 1;
+        dep_merge(deps, &cd);
+    }
+    pathset_del(key);
+
+    r.phi = phi; r.delta = delta;
+    dep_drop(deps, key);                 /* a self-dependency does not escape */
+    if (!df_abort) df_store(tkey, r, deps);
+    return r;
+}
+
+/* Returns 1 proved, -1 disproved, 0 unresolved. stats[] (12 slots) gets
+ * nodes, root pn, root dn, repetition leaves, twin stores, twin hits, plain
+ * stores, withheld, ply-cap hits, and the table's occupied entry count. */
+int th_dfpn(THPos *p, int attacker, uint64_t node_cap, int depth_limit,
+            int use_twins, uint64_t *stats) {
+    df_attacker = attacker;
+    df_cap = node_cap;
+    df_depth_limit = depth_limit;
+    df_use_twins = use_twins;
+    df_nodes = df_abort = 0;
+    df_st_rep = df_st_withheld = df_st_twin_store = df_st_twin_hit = 0;
+    df_st_plain_store = df_st_plycap = 0;
+    memset(df_pathset, 0, sizeof df_pathset);
+
+    Deps d = {{0}, 0};
+    uint64_t key = th_key(p);
+    PD r = df_mid(p, DF_INF, DF_INF, 0, key, &d);
+    int is_or = (p->stm == attacker);
+    uint32_t pn = is_or ? r.phi : r.delta, dn = is_or ? r.delta : r.phi;
+
+    if (stats) {
+        uint64_t used = 0;
+        if (dftt)
+            for (uint64_t i = 0; i <= dftt_mask; i++)
+                used += (dftt[i * 2].key != 0) + (dftt[i * 2 + 1].key != 0);
+        stats[0] = df_nodes; stats[1] = pn; stats[2] = dn;
+        stats[3] = df_st_rep; stats[4] = df_st_twin_store; stats[5] = df_st_twin_hit;
+        stats[6] = df_st_plain_store; stats[7] = df_st_withheld;
+        stats[8] = df_st_plycap; stats[9] = used;
+    }
+    return pn == 0 ? 1 : (dn == 0 ? -1 : 0);
+}
+
 /* Reseed the Zobrist tables. A 64-bit key can collide, and a colliding
  * position inheriting a sound-flagged entry would return another position's
  * value flagged as PROVEN. Re-running a proof under a different seed makes
@@ -1094,6 +1427,7 @@ void th_seed(uint64_t s) {
     for (int c = 0; c < 2; c++) for (int t = 0; t < 4; t++)
         for (int i = 0; i < 3; i++) zob_hand[c][t][i] = rng64();
     zob_stm = rng64();
+    for (int i = 0; i <= DFPN_MAXPLY; i++) zob_dfrem[i] = rng64();
 }
 
 void th_init(void) {

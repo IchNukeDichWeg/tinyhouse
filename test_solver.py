@@ -425,6 +425,12 @@ def test_every_cffi_symbol_has_a_contract_check(tt):
     cover("th_root_moves")
     assert E.lib.th_build_id() >> 32; cover("th_build_id")
 
+    assert E.lib.th_dfpn_init(16) == 0; cover("th_dfpn_init")
+    dst = E.ffi.new("uint64_t[12]")
+    assert E.lib.th_dfpn(E.to_c(mate9), T.BLACK, 200_000, -1, 1, dst) == 1
+    assert 0 < dst[0] < 200_000 and dst[1] == 0        # nodes spent, pn == 0
+    cover("th_dfpn")
+
     # a path under a directory that does not exist: both must refuse. Not a
     # directory path -- rename() onto a SYMLINK to a directory succeeds and
     # replaces the link, which is a portability trap rather than a contract.
@@ -702,3 +708,87 @@ def test_dfpn_agrees_with_the_alpha_beta_engine():
                        cwd=DIR, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "DISAGREE 0" in r.stdout, r.stdout
+
+
+# -- the C df-pn engine (TH-36) ---------------------------------------------
+
+def _dfpn(tt, tfen, attacker, cap=4_000_000, depth_limit=-1, twins=1, bits=21):
+    tt.lib.th_dfpn_init(bits)
+    st = tt.ffi.new("uint64_t[12]")
+    v = tt.lib.th_dfpn(tt.to_c(T.Position.from_tfen(tfen)), attacker, cap,
+                       depth_limit, twins, st)
+    return v, [st[i] for i in range(10)]
+
+
+@pytest.mark.parametrize("twins", [0, 1])
+def test_c_dfpn_proves_the_recorded_mate(tt, twins):
+    """The second engine must agree with the first on the position the project
+    has published a proof for -- with and without twin entries, since twins
+    change what may be reused across paths and are the part most able to be
+    subtly wrong."""
+    v, s = _dfpn(tt, "fuwk/3p/P1F1/KWU1[-] b", T.BLACK, twins=twins)
+    assert v == 1, f"expected a proof; got {v} after {s[0]:,} nodes"
+    assert s[0] < 50_000, f"took {s[0]:,} nodes; it used to take ~2,800"
+
+    # ...and White has no forced win from the same position. That is a positive
+    # DISPROOF, which the alpha-beta engine structurally cannot produce.
+    v, s = _dfpn(tt, "fuwk/3p/P1F1/KWU1[-] b", T.WHITE, twins=twins)
+    assert v == -1, f"expected a disproof; got {v} after {s[0]:,} nodes"
+
+
+def test_c_dfpn_proves_the_recorded_mate_in_13(tt):
+    v, s = _dfpn(tt, "1uwk/1f1p/PW2/K1UF[-] w", T.WHITE, depth_limit=13)
+    assert v == 1, f"expected a proof; got {v} after {s[0]:,} nodes"
+
+
+@pytest.mark.parametrize("twins", [0, 1])
+def test_c_dfpn_agrees_with_the_alpha_beta_engine(tt, twins):
+    """The cross-check that makes a second engine worth having: with a depth
+    limit d, df-pn answers exactly the question th_mate_hunt(d) answers, and
+    the two share no code beyond the move generator. Measured over a much
+    larger sweep than this one: 3,960 agreements, 0 disagreements."""
+    import random
+
+    random.seed(41)
+    roots = []
+    while len(roots) < 8:
+        p = T.Position.start()
+        for _ in range(random.randrange(1, 12)):
+            ms = p.legal_moves()
+            if not ms:
+                break
+            p.make(random.choice(ms))
+        else:
+            if p.legal_moves():
+                roots.append(p.tfen())
+
+    bm, snd = tt.ffi.new("uint16_t *"), tt.ffi.new("int *")
+    checked = 0
+    for tfen in roots:
+        for d in (4, 6):
+            for atk in (T.WHITE, T.BLACK):
+                tt.lib.th_tt_init(20)
+                tt.lib.th_clear_history()
+                ab = tt.lib.th_mate_hunt_mt(tt.to_c(T.Position.from_tfen(tfen)), d, atk,
+                                            1, bm, snd) > 29000
+                v, s = _dfpn(tt, tfen, atk, cap=2_000_000, depth_limit=d, twins=twins)
+                assert v != 0, f"node cap hit on {tfen} d{d}"
+                assert (v == 1) == ab, f"{tfen} d{d} atk={atk}: alpha-beta {ab}, df-pn {v}"
+                checked += 1
+    assert checked == 32
+
+
+def test_twin_entries_change_no_verdict(tt):
+    """Twins are the part of this engine whose soundness rests on measurement
+    rather than proof (see the header of tinyhouse.c's df-pn section), so the
+    on/off verdicts are pinned against each other. Twins-off is the
+    conservative rule and is sound by construction."""
+    for tfen, atk in [("fuwk/3p/P1F1/KWU1[-] b", T.BLACK),
+                      ("fuwk/3p/P1F1/KWU1[-] b", T.WHITE),
+                      ("3k/4/4/K1U1[-] w", T.WHITE),
+                      ("1uwk/P3/3p/K2F[UWf] w", T.WHITE)]:
+        a, _ = _dfpn(tt, tfen, atk, cap=2_000_000, twins=0)
+        b, sb = _dfpn(tt, tfen, atk, cap=2_000_000, twins=1)
+        assert a == b, f"{tfen} atk={atk}: twins off {a}, twins on {b}"
+        if a != 0:
+            assert sb[7] == 0 or sb[4] > 0        # something was withheld or twinned

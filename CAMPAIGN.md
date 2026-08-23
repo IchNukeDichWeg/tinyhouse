@@ -138,7 +138,7 @@ validated against the alpha-beta engine, and the gating milestone was run.
 | ID | Item | Status |
 |---|---|---|
 | TH-37 | reachable-position census | **CONFIRMED** |
-| TH-36 | df-pn as a second engine | **CONFIRMED** (engine validated; milestone answered: not viable in this form) |
+| TH-36 | df-pn as a second engine | **CONFIRMED** (C engine with KM twins; milestone answered NO, and twins refuted as the missing piece) |
 | TH-38 | bounded retrograde terminal shell | **CLOSED PRE-MEASUREMENT** |
 
 ## Tier 7 — GUI/UX

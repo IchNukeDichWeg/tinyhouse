@@ -17,6 +17,7 @@ the stalemated player winning. Full rules with sources: [RULES.md](RULES.md).
 | `solve_status.json` | Current proven solve bounds (shown in the GUI) |
 | `scripts/build_book.py` | Precompute analyses near the start into `analysis.sqlite` |
 | `scripts/state_count.py` | Exact syntactic state-space count |
+| `scripts/dfpn.py` | Python df-pn reference, and the drivers for the C engine |
 | `scripts/regress.py` | Paired nodes-to-depth + solver-digest regression harness |
 | `scripts/bench_ab.py` | Paired A/B benchmark: fresh process per repeat, interleaved |
 | `scripts/bench_workers.py` | Pick `--workers` by measuring at your target depth |
@@ -56,7 +57,7 @@ The game is **not solved**. What is proven so far (machine-readable in
 - no forced **Black** win within **22 plies** (303M nodes)
 
 so the game value is still open, consistent with the draw its reception suggests.
-`scripts/dfpn.py` reaches one result alpha-beta structurally cannot: a positive
+The df-pn engine reaches one result alpha-beta structurally cannot: a positive
 **disproof** that White has any forced win after `1.Fd1-c2`, rather than merely
 failing to find one. The
 engine **can** prove a draw, which was previously believed out of reach: bare kings
@@ -154,14 +155,14 @@ them:
 - **`--workers` at depth 20+.** One and two tie within noise at 18, three and
   beyond regress; deeper is unmeasured, and `scripts/bench_workers.py` is the
   tool.
-- **A df-pn engine that can actually close the draw claim.** `scripts/dfpn.py`
-  works and is validated against the alpha-beta engine (178 agreements, 0
-  disagreements; it proves the recorded mate in 9 in 2,770 nodes). But the
-  gating milestone says **no** for this formulation: on the start position it
-  resolves 1 of 6 root moves in 2.4M nodes while three disproof numbers sit
-  still and two rise. It is a Python prototype at ~5k nodes/s, and the
-  conservative graph-history rule withholds 39% of everything it computes —
-  a C implementation with Kishimoto-Müller twin entries is the next step.
+- **A way to close the draw claim at all.** There is now a C df-pn engine with
+  Kishimoto-Müller twin entries (`th_dfpn`), validated against the alpha-beta
+  engine over 3,960 comparisons with zero disagreements, and it answers the
+  gating milestone **no**: at 96M nodes the start position resolves 1 of its 6
+  root moves and the disproof numbers *rise*. Twins were the hypothesised
+  missing piece and are refuted as such — widening them to 8 conditioning keys
+  drives the withheld fraction to exactly 0.0% and makes the disproof number
+  slightly worse. The bottleneck is the size of the search, not the table.
 - **Whether history carry-over across iterative-deepening depths helps.**
   `CLEAR_HISTORY_AT_ROOT` exists and is off, because that is a different
   experiment from repeats at one depth and nobody has run it.
