@@ -1839,8 +1839,7 @@ is a 404, and the traversal guard the merge probed exhaustively is untouched.
 ## Campaign reconciliation
 
 ```
-backlog in 62  =  confirmed 54 + rejected 4 + closed-pre-measurement 2
-                  + moot 1 + blocked 1
+backlog in 62  =  confirmed 55 + rejected 4 + closed-pre-measurement 2 + moot 1
 ```
 
 TH-16 appears twice on purpose: its class A (node-identical) form is REJECTED
@@ -1855,7 +1854,7 @@ with the kept form recorded separately.
 | 3 instruments | 18 | 17 confirmed, 1 rejected |
 | 4 NPS | 7 | 5 confirmed, 1 rejected, 1 closed pre-measurement |
 | 5 efficiency | 4 | 2 confirmed, 2 rejected (1 of them kept in its other form) |
-| 6 new ideas | 3 | 1 confirmed, 1 blocked, 1 closed pre-measurement |
+| 6 new ideas | 3 | 2 confirmed, 1 closed pre-measurement |
 | 7 GUI | 3 | 3 confirmed |
 
 TH-16 was reclassified from tier 4 to tier 5 mid-campaign, on the measurement
@@ -1865,8 +1864,8 @@ that it is not node-identical, which is why tier 4 shows 7 and tier 5 shows 4.
 
 | gate | result |
 |---|---|
-| `pytest -q` | **110 passed**, 3 deselected (43 at the start) |
-| `pytest -q -m ""` | **112 passed, 1 xfailed** (the df-pn prototype, strict) |
+| `pytest -q` | **112 passed**, 3 deselected (43 at the start) |
+| `pytest -q -m ""` | **115 passed** (the df-pn xfail is now three real tests) |
 | `perft(7)` from start | 1,355,253 |
 | regression digest | `811f304f1eef7998`, 6,673,441 nodes |
 | mate in 9 / 13 / 13 | 29991 / 29987 / 29987, default seed **and** `0xC0FFEE` |
