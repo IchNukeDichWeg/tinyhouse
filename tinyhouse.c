@@ -585,6 +585,44 @@ uint64_t th_tt_fill(void) {
     return used;
 }
 
+/* Grow the table without losing it: allocate the larger array and rehash
+ * every live entry across. The full key is recoverable from the entry itself
+ * (key = xkey ^ data), which is what makes this possible at all; stored mate
+ * scores are ply-rebased at store time, so entries are position properties
+ * and survive rehashing unchanged. Two old slots can still collide in the new
+ * table; the collision keeps the more valuable entry, proven first, then
+ * deeper, matching tt_store's replacement taste. Single-threaded callers only
+ * (solve_hunt grows between depths, when the helpers are joined). Returns 0,
+ * or -1 on allocation failure with the OLD table left intact and live. */
+int th_tt_grow(int log2_entries) {
+    if (!tt) return th_tt_init(log2_entries);
+    uint64_t oldn = tt_mask + 1, newn = 1ULL << log2_entries;
+    if (newn <= oldn) return 0;              /* growth only; never shrink */
+    TTEntry *nt = calloc(newn, sizeof(TTEntry));
+    if (!nt) return -1;
+    uint64_t nmask = newn - 1;
+    for (uint64_t i = 0; i < oldn; i++) {
+        uint64_t d = atomic_load_explicit(&tt[i].data, memory_order_relaxed);
+        if (!d) continue;
+        uint64_t x = atomic_load_explicit(&tt[i].xkey, memory_order_relaxed);
+        uint64_t key = x ^ d;
+        TTEntry *e = &nt[key & nmask];
+        uint64_t ed = atomic_load_explicit(&e->data, memory_order_relaxed);
+        if (ed) {
+            int op = ((ed >> 44 & 0xf) == (SND_LB | SND_UB)) && ((ed >> 40 & 0xf) == TT_EXACT);
+            int np = ((d >> 44 & 0xf) == (SND_LB | SND_UB)) && ((d >> 40 & 0xf) == TT_EXACT);
+            if (op && !np) continue;
+            if (op == np && (uint8_t)(ed >> 32) >= (uint8_t)(d >> 32)) continue;
+        }
+        atomic_store_explicit(&e->data, d, memory_order_relaxed);
+        atomic_store_explicit(&e->xkey, key ^ d, memory_order_relaxed);
+    }
+    free(tt);
+    tt = nt;
+    tt_mask = nmask;
+    return 0;
+}
+
 static void nodes_flush(void) {
     if (tl_pending) { atomic_fetch_add_explicit(&g_nodes, tl_pending, memory_order_relaxed); tl_pending = 0; }
 }

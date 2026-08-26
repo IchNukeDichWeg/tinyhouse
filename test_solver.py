@@ -403,6 +403,7 @@ def test_every_cffi_symbol_has_a_contract_check(tt):
     cover("th_seed")
 
     assert E.lib.th_tt_init(18) == 0; cover("th_tt_init")
+    assert E.lib.th_tt_grow(18) == 0; cover("th_tt_grow")   # never shrinks: no-op is 0
     assert E.lib.th_tt_fill() == 0                      # a fresh table is empty
     E.lib.th_solve(E.to_c(start), 6, bm, snd)
     assert 0 < E.lib.th_tt_fill() <= (1 << 18); cover("th_tt_fill")
@@ -849,3 +850,62 @@ def test_the_two_perft_engines_agree_on_random_walks(tt):
                     break
                 pos.make(random.choice(ms))
     assert compared > 300, compared
+
+
+def test_tt_growth_preserves_the_table(tt):
+    """The growing table's whole point: entries survive the rehash.
+
+    The key is recoverable from the entry itself (key = xkey ^ data) and stored
+    mate scores are ply-rebased at store time, so entries are position
+    properties and rehashing moves them intact. Pinned by behaviour, not by
+    counting: a warm re-solve after growth must collapse to near-nothing and
+    return the identical value, exactly as it would without the growth.
+    """
+    import engine_c as E
+
+    mate9 = "fuwk/3p/P1F1/KWU1[-] b"
+    E.lib.th_tt_init(14)
+    E.lib.th_clear_history()
+    bm, snd = E.ffi.new("uint16_t *"), E.ffi.new("int *")
+    n0 = E.lib.th_nodes()
+    v_cold = E.lib.th_solve(E.to_c(T.Position.from_tfen(mate9)), 10, bm, snd)
+    cold = E.lib.th_nodes() - n0
+    fill_before = E.lib.th_tt_fill()
+    assert v_cold == 29991 and fill_before > 0
+
+    assert E.lib.th_tt_grow(17) == 0
+    assert E.lib.th_tt_fill() >= fill_before * 0.95     # rare rehash collisions only
+
+    n0 = E.lib.th_nodes()
+    v_warm = E.lib.th_solve(E.to_c(T.Position.from_tfen(mate9)), 10, bm, snd)
+    warm = E.lib.th_nodes() - n0
+    assert v_warm == v_cold
+    assert warm < cold * 0.05, f"warm {warm:,} vs cold {cold:,}: the table did not survive"
+
+
+def test_solve_hunt_grows_and_resumes_across_the_growth(tmp_path):
+    """End to end: the table starts small, grows on the projection, the
+    checkpoint records the grown size, and a resume reopens at that size and
+    reloads the dump rather than discarding it."""
+    import json
+
+    state = tmp_path / "s.json"
+
+    def hunt(maxdepth):
+        r = subprocess.run(
+            [sys.executable, str(DIR / "solve_hunt.py"), "0", "--tt", "20",
+             "--tt-start", "14", "--workers", "1",
+             "--maxdepth", str(maxdepth), "--state", str(state)],
+            cwd=DIR, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        return r.stdout
+
+    first = hunt(14)
+    assert "grew to 2^" in first
+    saved = json.loads(state.read_text())
+    assert saved["tt_bits_now"] > 14
+    assert saved["tt_bits_now"] <= 20
+
+    second = hunt(16)
+    assert "resumed from" in second and "table reloaded" in second
+    assert "depth 16" in second

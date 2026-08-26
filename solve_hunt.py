@@ -57,6 +57,14 @@ from pathlib import Path
 import engine_c as E
 import tinyhouse as T
 
+# Grow the table when occupancy crosses this, checked between depths (the SMP
+# helpers are joined there, so the rehash runs single-threaded). Growth is +2
+# bits per step, capped at --tt. Measured motivation: an oversized table costs
+# real time at shallow depths (d16 ran 2.21s at 2^20 against 2.61s at 2^27),
+# and a right-sized start also means --tt is a CAP rather than an upfront
+# multi-GiB allocation.
+TT_GROW_AT = 0.80
+
 ap = argparse.ArgumentParser()
 ap.add_argument("color", type=int, choices=(0, 1), help="0 = White win hunt, 1 = Black")
 # Default 1, not 2 (TH-05). Lazy SMP is NONDETERMINISTIC by construction --
@@ -67,7 +75,9 @@ ap.add_argument("color", type=int, choices=(0, 1), help="0 = White win hunt, 1 =
 # never depended on this; only the node counts do.
 ap.add_argument("--workers", type=int, default=1, help="lazy SMP threads; >1 makes node counts nondeterministic. Measure with scripts/bench_workers.py, scaling is depth-dependent")
 ap.add_argument("--maxdepth", type=int, default=40)
-ap.add_argument("--tt", type=int, default=26, help="log2 TT entries (26 = 1 GiB, 27 = 2 GiB)")
+ap.add_argument("--tt", type=int, default=26, help="log2 TT entries CAP (26 = 1 GiB, 27 = 2 GiB); the table starts at --tt-start and grows toward this")
+ap.add_argument("--tt-start", type=int, default=20,
+                help="log2 of the initial table; it grows when occupancy crosses TT_GROW_AT")
 ap.add_argument("--tfen", default="fuwk/3p/P3/KWUF[-] w")
 ap.add_argument("--seed", type=lambda x: int(x, 0), default=0,
                 help="Zobrist seed; re-run a proof under a second seed to rule "
@@ -130,9 +140,50 @@ state_path.parent.mkdir(parents=True, exist_ok=True)
 if args.seed:
     E.lib.th_seed(args.seed)
 check_tt_size(args.tt)
-if E.lib.th_tt_init(args.tt) != 0:
-    sys.exit(f"could not allocate a 2^{args.tt}-entry table "
-             f"({(1 << args.tt) * 16 // 2**20} MiB). Use a smaller --tt.")
+tt_bits_now = min(max(args.tt_start, 12), args.tt)
+if E.lib.th_tt_init(tt_bits_now) != 0:
+    sys.exit(f"could not allocate a 2^{tt_bits_now}-entry table "
+             f"({(1 << tt_bits_now) * 16 // 2**20} MiB). Use a smaller --tt-start.")
+
+
+def maybe_grow_tt(growth):
+    """Between depths only: the helpers are joined, so the rehash is safe.
+
+    Sizes for the NEXT depth, not the one that just finished: entries grow by
+    roughly the same factor as nodes, so the projection is fill x growth, and
+    the table is grown until that projection sits at or under half. Reactive
+    growth was measured to lag -- a depth run on a table that saturated
+    mid-search cost 11.0M nodes against 9.6M on one sized for it.
+    """
+    global tt_bits_now
+    fill = E.lib.th_tt_fill()
+    occ = fill / (1 << tt_bits_now)
+    line = f"  tt 2^{tt_bits_now}: {fill:,} entries, {occ:.0%} full"
+    projected = fill * growth
+    want_bits = tt_bits_now
+    while want_bits < args.tt and projected > 0.5 * (1 << want_bits):
+        want_bits += 1
+    if (want_bits > tt_bits_now or occ >= TT_GROW_AT) and tt_bits_now < args.tt:
+        new_bits = min(max(want_bits, tt_bits_now + 1), args.tt)
+        want = (1 << new_bits) * 16
+        free = free_bytes()
+        if free and want > free * 0.9:
+            print(line + f" -- growth to 2^{new_bits} needs "
+                  f"{want / 2**30:.1f} GiB but only ~{free / 2**30:.1f} GiB is free; "
+                  f"staying at 2^{tt_bits_now}", flush=True)
+            return
+        t0 = time.perf_counter()
+        if E.lib.th_tt_grow(new_bits) != 0:
+            print(line + f" -- growth to 2^{new_bits} failed to allocate; "
+                  f"staying at 2^{tt_bits_now}", flush=True)
+            return
+        kept = E.lib.th_tt_fill()
+        print(line + f", projecting ~{int(projected):,} next depth "
+              f"-> grew to 2^{new_bits} ({(1 << new_bits) * 16 / 2**30:.2f} GiB), "
+              f"{kept:,} entries carried over, {time.perf_counter() - t0:.1f}s", flush=True)
+        tt_bits_now = new_bits
+    else:
+        print(line + (f" (cap 2^{args.tt})" if tt_bits_now < args.tt else " (at cap)"), flush=True)
 
 # Everything that changes what a completed depth MEANS. `build` is the engine
 # fingerprint: "no forced win through depth 20" is a claim about the code that
@@ -140,12 +191,17 @@ if E.lib.th_tt_init(args.tt) != 0:
 IDENT_KEYS = ("tfen", "color", "seed", "tt_bits", "build")
 state = {"tfen": args.tfen, "color": args.color, "seed": args.seed, "tt_bits": args.tt,
          "build": E.lib.th_build_id(),
+         "tt_bits_now": tt_bits_now,
          "proven_no_win_through": 0, "result": None, "depths": []}
 if state_path.exists() and not args.fresh:
     loaded = json.loads(state_path.read_text())
     differs = [k for k in IDENT_KEYS if loaded.get(k) != state[k]]
     if not differs:
         state = loaded
+        # the table may have grown before the checkpoint: reopen at that size
+        tt_bits_now = min(state.get("tt_bits_now", args.tt), args.tt)
+        if E.lib.th_tt_init(tt_bits_now) != 0:
+            sys.exit(f"could not allocate the checkpoint's 2^{tt_bits_now}-entry table")
         rc = E.lib.th_tt_load(str(tt_path).encode())
         print(f"resumed from {state_path}: no win through depth "
               f"{state['proven_no_win_through']}, "
@@ -225,7 +281,8 @@ def on_sigint(sig, frm):
 signal.signal(signal.SIGINT, on_sigint)
 
 print(f"hunting forced {name} win from {args.tfen}")
-print(f"workers {args.workers}, tt 2^{args.tt} entries ({(1 << args.tt) * 16 // 2**20} MiB)"
+print(f"workers {args.workers}, tt 2^{tt_bits_now} entries "
+      f"({(1 << tt_bits_now) * 16 // 2**20} MiB, growing toward cap 2^{args.tt})"
       + (f", zobrist seed {args.seed:#x}" if args.seed else "")
       + f", state {state_path}", flush=True)
 
@@ -294,6 +351,8 @@ for d in range(start_depth, args.maxdepth + 1, 2):
         print(seed_advice(d), flush=True)
         break
     state["proven_no_win_through"] = d
+    maybe_grow_tt(growth)
+    state["tt_bits_now"] = tt_bits_now
     save_state()
     print(f"  => no forced {name} win within {d} plies (proven, "
           + ("checkpointed)" if last_save_ok else "progress recorded, no table dump)"), flush=True)
