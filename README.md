@@ -11,7 +11,7 @@ where each one came from.
 | File | What |
 |---|---|
 | `tinyhouse.py` | Python rules engine (movegen, make/unmake, hands, TFEN, perft) |
-| `tinyhouse.c` | C hot path: same encodings, plus the search and a df-pn engine |
+| `tinyhouse.c` | C hot path: mailbox + uint16-bitboard movegen, the search, a df-pn engine |
 | `engine_c.py` | cffi (ABI) wrapper; auto-builds `libtinyhouse.dylib` with `cc` |
 | `server.py` + `index.html` | Local web GUI, stdlib only |
 | `solve_hunt.py` | Deep one-colour forced-win hunt from the start position |
