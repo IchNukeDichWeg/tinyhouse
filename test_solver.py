@@ -792,3 +792,26 @@ def test_twin_entries_change_no_verdict(tt):
         assert a == b, f"{tfen} atk={atk}: twins off {a}, twins on {b}"
         if a != 0:
             assert sb[7] == 0 or sb[4] > 0        # something was withheld or twinned
+
+
+def test_a_shared_leg_blocks_a_double_mao_check(tt):
+    """Found by the bitboard perft cross-check, not by any of the campaign's
+    74,702-position walks: TH-16's check_block_square declared every double-mao
+    check unblockable, but two maos attacking THROUGH THE SAME LEG SQUARE are
+    both blocked by one drop on it.
+
+    Here Black's a2 king is checked by the mao on c3 and the promoted mao on
+    b4, both via b3. Black holds all four piece types: the four blocking drops
+    on b3 are legal, and pruning them undercounted perft and handed the search
+    a defender with four fewer defenses -- a wrong-PROVEN vector in both
+    directions.
+    """
+    tfen = "1U~2/2U1/k1K1/4[FWpfuw] b"
+    pos = T.Position.from_tfen(tfen)
+    truth = sorted(T.move_str(m) for m in pos.legal_moves())
+    assert truth == ["F@b3", "P@b3", "U@b3", "W@b3", "a2a1", "a2a3"]
+
+    buf = tt.ffi.new("uint16_t[128]")
+    n = tt.lib.th_moves(tt.to_c(pos), buf)
+    got = sorted(T.move_str(buf[i]) for i in range(n))
+    assert got == truth, f"C engine returned {got}"

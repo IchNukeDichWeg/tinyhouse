@@ -242,11 +242,19 @@ static int check_block_square(const THPos *p, int ks, int *sq) {
     for (int i = 0; MAO_ATT[ks][i][0] != 0xff; i++) {
         int pc = p->board[MAO_ATT[ks][i][0]];
         if (pc && COLOR(pc) == them && TYPE(pc) == U && !p->board[MAO_ATT[ks][i][1]]) {
-            if (++attackers > 1) return 0;    /* double mao check: nothing blocks both */
+            /* A double mao check is blockable iff both attackers run THROUGH
+             * THE SAME LEG - one drop then blocks both. The first version
+             * declared every double check unblockable and pruned four legal
+             * blocking drops on 1U~2/2U1/k1K1/4[FWpfuw] b, which perft never
+             * caught: the acceptance positions had no same-leg double check,
+             * and neither did 74,702 randomly walked positions. Found by the
+             * bitboard perft cross-check. */
+            if (attackers && MAO_ATT[ks][i][1] != leg) return 0;
+            attackers++;
             leg = MAO_ATT[ks][i][1];
         }
     }
-    if (attackers != 1) return 0;
+    if (!attackers) return 0;
     *sq = leg;
     return 1;
 }
