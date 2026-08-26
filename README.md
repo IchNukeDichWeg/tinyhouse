@@ -91,19 +91,20 @@ under a second seed matters for the bounds as much as for the wins.
 summary line per completed depth.
 
 ```bash
-.venv/bin/python solve_hunt.py 0 --tt 27 --workers 6 --maxdepth 26
+.venv/bin/python solve_hunt.py 0 --tt 28 --workers 6 --maxdepth 26
 ```
 
 ```bash
-.venv/bin/python solve_hunt.py 1 --tt 27 --workers 6 --maxdepth 28
+.venv/bin/python solve_hunt.py 1 --tt 28 --workers 6 --maxdepth 28
 ```
 
 Run them one after the other. Six workers each would oversubscribe a 10-core machine.
 At six workers, depth 22 takes roughly 9 minutes, depth 24 about 70, and depth 26
 somewhere near 9 or 10 hours.
 
-`color 0` hunts a White forced win and `1` hunts Black. `--tt BITS` is log2 of the
-number of transposition-table entries, so 27 is 2 GiB. `--maxdepth D` stops early,
+`color 0` hunts a White forced win and `1` hunts Black. `--tt BITS` is log2 of a
+CAP on transposition-table entries, so 28 caps at 4 GiB — see below; it is not an
+upfront allocation. `--maxdepth D` stops early,
 `--tfen` hunts from a position other than the start, and `--seed S` re-runs a proof
 under different Zobrist keys.
 
@@ -140,18 +141,20 @@ predicting depth 26 is still an extrapolation, so measure at your own target dep
 
 ### Choosing --tt
 
-The default is 26, one GiB. Measured on this machine with a single worker, hunting a
-White win from the start:
+`--tt` is a **cap**. The table starts at `--tt-start` (default 2^20) and grows
+between depths, sized by projecting the next depth's fill from the measured
+growth factor; each step rehashes every entry across (the key is recoverable
+from `xkey ^ data`) and prints occupancy, the projection, entries carried and
+the time. Growth is refused with a message when free memory will not cover it,
+so a high cap is safe on a loaded machine — it only materializes if occupancy
+earns it.
 
-| depth | best on nodes | occupancy at 2^26 |
-|---|---|---|
-| 16 | 2^20 (9.56M; 2^26 is no better) | 7.0% at 2^24 |
-| 18 | 2^24 (81.9M against 86.7M at 2^26) | 14.9% |
-
-At depths that finish in seconds the default is oversized. Occupancy is what climbs
-with depth, though, and the table that matters is the one a depth-20-plus overnight
-run needs, so lowering the default on a depth-18 curve would be the wrong call.
-Measure at the depth you actually intend to run:
+What the cap protects against is running *saturated* below it: a 91.7%-full
+table measured 216.6s against 100.3s for the next size up on the same work.
+The other direction is free — interleaved measurement of an oversized table
+(2^24 vs 2^27 at depth 20) is within noise, so there is no penalty for capping
+high. That retires most of the old hand-tuning; the sweep below remains for
+checking the growth policy's choices at your real depth:
 
 ```bash
 .venv/bin/python scripts/bench_workers.py --depth 20 --tt-sweep 22,24,26,27 --repeats 2
