@@ -6,7 +6,12 @@ reverted and recorded is a success**; an item that lands unmeasured is not.
 
 ## Measurement protocol (tiers 4-5)
 
-- Machine: Apple M2 Pro, 10 cores, 16 GiB, Darwin 25.5.0. Every number below is
+- Machine: recorded as Apple M2 Pro, 10 cores, 16 GiB, Darwin 25.5.0 — that
+  attribution was never verified and the project has since been found running on
+  an Apple M5 Pro, 18 cores, 64 GiB. Ratios between arms measured in the same
+  session remain valid (that is what the control arm is for); absolute times and
+  anything tied to core count or RAM should be re-measured before being trusted.
+  Every number below is
   from this machine unless stated otherwise.
 - Each repeat is a **fresh process**. The thread-local `history[2][2048]` table
   carries over between in-process searches, which is worth up to 38% of the node

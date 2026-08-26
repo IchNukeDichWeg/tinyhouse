@@ -91,11 +91,11 @@ under a second seed matters for the bounds as much as for the wins.
 summary line per completed depth.
 
 ```bash
-.venv/bin/python solve_hunt.py 0 --tt 28 --workers 6 --maxdepth 26
+.venv/bin/python solve_hunt.py 0 --tt 28 --workers 16 --maxdepth 26
 ```
 
 ```bash
-.venv/bin/python solve_hunt.py 1 --tt 28 --workers 6 --maxdepth 28
+.venv/bin/python solve_hunt.py 1 --tt 28 --workers 16 --maxdepth 28
 ```
 
 Run them one after the other. Six workers each would oversubscribe a 10-core machine.
@@ -119,7 +119,24 @@ The default is 1, because lazy SMP is not deterministic. Helpers perturb move
 ordering, so the same depth run twice gives different node counts. The proofs never
 depended on the thread count, but reproducing the recorded node counts does.
 
-Scaling depends on depth, and the direction reverses between 18 and 20 (M2 Pro, 10
+Scaling depends on depth AND on the machine, and both have changed under this
+project — the worker numbers below were taken on two different boxes, so read the
+machine column, not just the worker count.
+
+On an 18-core Apple M5 Pro at depth 20, interleaved arms, three repeats (one
+discarded as contaminated), `--tt 26`:
+
+| workers | 1 | 4 | 6 | 8 | 12 | 16 |
+|---|---|---|---|---|---|---|
+| median | 113.8s | 57.5s | 52.4s | 55.1s | 48.7s | **47.1s** |
+| speedup | — | ×2.0 | ×2.2 | ×2.1 | ×2.3 | **×2.4** |
+
+Gains flatten past 12; 16 is marginally best. Nodes rise steeply with workers
+(674M at one, 3.15G at sixteen) because helpers duplicate work — the wall clock
+still wins, which is the whole bet of lazy SMP.
+
+The older 10-core measurements below are kept because they show the effect that
+matters: the direction reverses between 18 and 20 (M2 Pro, 10
 cores):
 
 | workers | depth 18 (medians of 3) | depth 20 (1 sample) |

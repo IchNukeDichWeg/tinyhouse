@@ -138,23 +138,42 @@ if args.tt_sweep:
 
 counts = [int(w) for w in args.workers.split(",")]
 print(f"depth {args.depth}, color {args.color}, tt 2^{args.tt}, "
-      f"{args.repeats} repeats each (+1 warmup, discarded)")
+      f"{args.repeats} repeats each (+1 warmup, discarded), arms INTERLEAVED")
 print("machine checked idle; medians are what count\n")
-best = None
+
+# Arms are interleaved -- one rep of every worker count, then the next rep --
+# rather than finishing one arm before starting the next. A sweep at a real
+# depth runs for many minutes, and anything that drifts over that window
+# (thermal throttling, another process starting, Spotlight waking up) would
+# otherwise land entirely on whichever arms happened to run during it. This is
+# the same discipline bench_ab.py uses; without it the outer-loop order is
+# itself a variable.
 for w in counts:
-    one_hunt(args.tt, w)                   # warmup, discarded
-    times, nodes = [], []
-    for _ in range(args.repeats):
+    one_hunt(args.tt, w)                   # warmup per arm, discarded
+times = {w: [] for w in counts}
+nodes = {w: [] for w in counts}
+value = None
+for rep in range(args.repeats):
+    for w in counts:
         dt, n, v = one_hunt(args.tt, w)
-        times.append(dt); nodes.append(n)
-    med = statistics.median(times)
-    spread = max(times) - min(times)
+        times[w].append(dt); nodes[w].append(n)
+        value = v
+    print(f"  rep {rep + 1}/{args.repeats}: "
+          + "  ".join(f"{w}w {times[w][-1]:.1f}s" for w in counts), flush=True)
+
+print()
+best = None
+base = statistics.median(times[counts[0]])
+for w in counts:
+    med = statistics.median(times[w])
+    spread = (max(times[w]) - min(times[w])) / med * 100 if med else 0
     # nodes in full, not rounded to meganodes: "{n/1e6:8.0f}M" printed "1M"
     # for everything from 500k to 1.5M, which is exactly the range these depths
     # land in, and nodes are the load-independent metric here.
-    print(f"workers {w:2d}  median {med:7.1f}s  spread {spread:6.1f}s  "
-          f"median nodes {statistics.median(nodes):>14,.0f}  value {v}", flush=True)
+    print(f"workers {w:2d}  median {med:7.1f}s  spread {spread:4.1f}%  "
+          f"speedup x{base / med:5.2f}  median nodes {statistics.median(nodes[w]):>14,.0f}")
     if best is None or med < best[1]:
         best = (w, med)
-print(f"\nbest at depth {args.depth}: --workers {best[0]} ({best[1]:.1f}s median)")
+print(f"\nbest at depth {args.depth}: --workers {best[0]} ({best[1]:.1f}s median, "
+      f"x{base / best[1]:.2f} over {counts[0]} worker(s)); value {value}")
 print("re-measure if you move to a materially deeper target depth.")
