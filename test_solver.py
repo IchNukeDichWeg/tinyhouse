@@ -372,6 +372,10 @@ def test_every_cffi_symbol_has_a_contract_check(tt):
 
     E.lib.th_init(); cover("th_init")                       # idempotent
     assert E.lib.th_perft(E.to_c(start), 4) == 1855; cover("th_perft")
+    # both perft engines answer the same question; the differential walk test
+    # is the real coverage, this pins the signatures
+    assert E.lib.th_perft_mailbox(E.to_c(start), 4) == 1855; cover("th_perft_mailbox")
+    assert E.lib.th_perft_bitboard(E.to_c(start), 4) == 1855; cover("th_perft_bitboard")
     assert E.lib.th_moves(E.to_c(start), E.ffi.NULL) == 6; cover("th_moves")
     assert E.lib.th_in_check(E.to_c(checked), T.BLACK) == 1
     assert E.lib.th_in_check(E.to_c(start), T.WHITE) == 0; cover("th_in_check")
@@ -815,3 +819,33 @@ def test_a_shared_leg_blocks_a_double_mao_check(tt):
     n = tt.lib.th_moves(tt.to_c(pos), buf)
     got = sorted(T.move_str(buf[i]) for i in range(n))
     assert got == truth, f"C engine returned {got}"
+
+
+def test_the_two_perft_engines_agree_on_random_walks(tt):
+    """The permanent differential: the mailbox and bitboard movegens share no
+    board representation, no move loop and no legality mechanism, so agreement
+    between them is evidence in a way that re-running one of them is not.
+    Writing the bitboard engine found the shared-leg double-mao-check pruning
+    bug that 74,702 walked positions had missed; this keeps both engines
+    disagreeing loudly rather than drifting apart quietly.
+    """
+    import random
+
+    random.seed(97)
+    roots = ["fuwk/3p/P3/KWUF[-] w", "1k2/4/2K1/4[PFUWpfuw] w",
+             "3k/2U~1/4/K3[-] b", "1U~2/2U1/k1K1/4[FWpfuw] b"]
+    compared = 0
+    for root in roots:
+        for _ in range(8):
+            pos = T.Position.from_tfen(root)
+            for ply in range(16):
+                d = 4 if ply % 5 == 0 else 3
+                a = tt.lib.th_perft_mailbox(tt.to_c(pos), d)
+                b = tt.lib.th_perft_bitboard(tt.to_c(pos), d)
+                assert a == b, f"{pos.tfen()} d{d}: mailbox {a:,} bitboard {b:,}"
+                compared += 1
+                ms = pos.legal_moves()
+                if not ms:
+                    break
+                pos.make(random.choice(ms))
+    assert compared > 300, compared

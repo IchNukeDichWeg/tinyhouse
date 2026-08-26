@@ -393,7 +393,7 @@ int th_result(THPos *p) {
     return th_in_check(p, p->stm) ? -1 : 1;
 }
 
-uint64_t th_perft(THPos *p, int depth) {
+uint64_t th_perft_mailbox(THPos *p, int depth) {
     uint16_t buf[128];
     Undo u;
     if (depth == 0) return 1;
@@ -406,7 +406,7 @@ uint64_t th_perft(THPos *p, int depth) {
         if (!in_chk && cannot_expose_king(p, buf[i], ks)) {
             if (depth == 1) { total += 1; continue; }
             make(p, buf[i], &u);
-            total += th_perft(p, depth - 1);
+            total += th_perft_mailbox(p, depth - 1);
             unmake(p, &u);
             continue;
         }
@@ -419,7 +419,7 @@ uint64_t th_perft(THPos *p, int depth) {
         make(p, buf[i], &u);
         if (!th_in_check(p, 1 - p->stm))
 #endif
-            total += depth == 1 ? 1 : th_perft(p, depth - 1);
+            total += depth == 1 ? 1 : th_perft_mailbox(p, depth - 1);
         unmake(p, &u);
     }
     return total;
@@ -1420,6 +1420,279 @@ int th_dfpn(THPos *p, int attacker, uint64_t node_cap, int depth_limit,
         stats[8] = df_st_plycap; stats[9] = used;
     }
     return pn == 0 ? 1 : (dn == 0 ? -1 : 0);
+}
+
+/* ---------------------------------------------------------- bitboard perft
+ * A 4x4 board fits in one uint16_t, so the whole position is eleven 16-bit
+ * masks plus the hand counts (~30 bytes): a child node is a struct COPY plus a
+ * few XORs - no mailbox, no make/unmake, no undo. Types are mask membership
+ * (king = wk & fk, wazir = wk & ~fk, ferz = fk & ~wk), and a promoted mask
+ * tracks which pieces revert to pawns when captured. Legality reuses the
+ * no-sliders theorem from TH-11: only king moves and enemy-mao-leg vacations
+ * can expose the mover's king, so a per-node risky mask marks the origins that
+ * need a real test and everything else is counted with popcount. Promotion
+ * legality does not depend on the piece chosen, so a promoting move is tested
+ * once and counted three times.
+ *
+ * Measured (M2 Pro, interleaved medians, spread under 2%): 113 Mnps on the
+ * start position, 170 with hands in play, 297 drop-heavy - x2.10 / x2.20 /
+ * x2.54 over the mailbox walk. Perft only: the search keeps the mailbox
+ * generator, whose cost profile is TT-dominated and where the cheap
+ * representation change measured as a loss (TH-14).
+ *
+ * The mailbox path below is kept compiled as th_perft_mailbox: it is the
+ * toggle-off pin, and the differential test in test_solver.py runs both over
+ * random walks forever. That differential is not decoration - writing this
+ * engine found a real pruning bug in check_block_square that 74,702 walked
+ * positions and every perft acceptance number had missed. Two independent
+ * movegens that must agree are the instrument that catches the third bug.
+ *   0 = mailbox perft, 1 = bitboard perft (counts identical either way) */
+#define BITBOARD_PERFT 1
+
+
+static uint16_t BB_ORTH[16], BB_DIAG[16], BB_KING[16], BB_PCAP[2][16], BB_MAOORIG[16];
+#define BB_BACKRANKS 0xF00Fu
+static int bb_ready = 0;
+
+static void bb_init(void) {
+    if (bb_ready) return;
+    for (int s = 0; s < 16; s++) {
+        for (const uint8_t *n = ORTH[s]; *n != 0xff; n++) BB_ORTH[s] |= 1u << *n;
+        for (const uint8_t *n = DIAG[s]; *n != 0xff; n++) BB_DIAG[s] |= 1u << *n;
+        BB_KING[s] = BB_ORTH[s] | BB_DIAG[s];
+        for (int c = 0; c < 2; c++)
+            for (const uint8_t *n = PCAPS[c][s]; *n != 0xff; n++) BB_PCAP[c][s] |= 1u << *n;
+        for (int i = 0; MAO_ATT[s][i][0] != 0xff; i++) BB_MAOORIG[s] |= 1u << MAO_ATT[s][i][0];
+    }
+    bb_ready = 1;
+}
+
+typedef struct {
+    uint16_t occ, by[2], pawns[2], maos[2], wk[2], fk[2], prom[2];
+    uint8_t hands[2][4];
+} BState;
+
+static void bst_from(const THPos *p, BState *b) {
+    memset(b, 0, sizeof *b);
+    for (int s = 0; s < 16; s++) {
+        int pc = p->board[s];
+        if (!pc) continue;
+        int c = COLOR(pc);
+        uint16_t m = 1u << s;
+        b->occ |= m; b->by[c] |= m;
+        if (PROMOTED(pc)) b->prom[c] |= m;
+        switch (TYPE(pc)) {
+        case P: b->pawns[c] |= m; break;
+        case U: b->maos[c] |= m; break;
+        case W: b->wk[c] |= m; break;
+        case F: b->fk[c] |= m; break;
+        default: b->wk[c] |= m; b->fk[c] |= m;
+        }
+    }
+    for (int c = 0; c < 2; c++)
+        for (int t = 0; t < 4; t++) b->hands[c][t] = (uint8_t)p->hands[c][t];
+}
+
+static int bst_attacked(const BState *b, int sq, int by) {
+    if (BB_ORTH[sq] & b->wk[by]) return 1;
+    if (BB_DIAG[sq] & b->fk[by]) return 1;
+    if (BB_PCAP[1 - by][sq] & b->pawns[by]) return 1;
+    if (BB_MAOORIG[sq] & b->maos[by])
+        for (int i = 0; MAO_ATT[sq][i][0] != 0xff; i++)
+            if (((b->maos[by] >> MAO_ATT[sq][i][0]) & 1) && !((b->occ >> MAO_ATT[sq][i][1]) & 1))
+                return 1;
+    return 0;
+}
+
+/* child = parent + move. promo is 0 or F/U/W. */
+static void bst_move(BState *b, int us, int s, int to, int promo) {
+    uint16_t fm = 1u << s, tm = 1u << to;
+    int them = 1 - us;
+    if (b->by[them] & tm) {                          /* capture: to hand as raw type */
+        int ct = (b->prom[them] & tm) ? P
+               : (b->pawns[them] & tm) ? P
+               : (b->maos[them] & tm) ? U
+               : (b->wk[them] & tm) ? W : F;
+        b->hands[us][ct]++;
+        b->by[them] &= (uint16_t)~tm;
+        b->pawns[them] &= (uint16_t)~tm; b->maos[them] &= (uint16_t)~tm;
+        b->wk[them] &= (uint16_t)~tm; b->fk[them] &= (uint16_t)~tm;
+        b->prom[them] &= (uint16_t)~tm;
+    }
+    b->occ = (uint16_t)((b->occ & ~fm) | tm);
+    b->by[us] = (uint16_t)((b->by[us] & ~fm) | tm);
+    if (b->prom[us] & fm) { b->prom[us] = (uint16_t)((b->prom[us] & ~fm) | tm); }
+    if (b->pawns[us] & fm) {
+        b->pawns[us] &= (uint16_t)~fm;
+        if (promo == U) { b->maos[us] |= tm; b->prom[us] |= tm; }
+        else if (promo == W) { b->wk[us] |= tm; b->prom[us] |= tm; }
+        else if (promo == F) { b->fk[us] |= tm; b->prom[us] |= tm; }
+        else b->pawns[us] |= tm;
+    } else if (b->maos[us] & fm) {
+        b->maos[us] &= (uint16_t)~fm; b->maos[us] |= tm;
+    } else {
+        if (b->wk[us] & fm) { b->wk[us] &= (uint16_t)~fm; b->wk[us] |= tm; }
+        if (b->fk[us] & fm) { b->fk[us] &= (uint16_t)~fm; b->fk[us] |= tm; }
+    }
+}
+
+static uint16_t bst_targets(const BState *b, int us, int s) {
+    uint16_t own = b->by[us], fm = 1u << s;
+    if (b->pawns[us] & fm) {
+        uint16_t t = BB_PCAP[us][s] & b->by[1 - us];
+        int to = s + PUSH[us];
+        if (to >= 0 && to < 16 && !((b->occ >> to) & 1)) t |= 1u << to;
+        return t;
+    }
+    if (b->maos[us] & fm) {
+        uint16_t t = 0;
+        for (int i = 0; MAO_MOVES[s][i][0] != 0xff; i++)
+            if (!((b->occ >> MAO_MOVES[s][i][0]) & 1) && !((own >> MAO_MOVES[s][i][1]) & 1))
+                t |= 1u << MAO_MOVES[s][i][1];
+        return t;
+    }
+    uint16_t wkb = b->wk[us] & fm, fkb = b->fk[us] & fm;
+    if (wkb && fkb) return BB_KING[s] & (uint16_t)~own;
+    if (wkb) return BB_ORTH[s] & (uint16_t)~own;
+    return BB_DIAG[s] & (uint16_t)~own;
+}
+
+static uint64_t bst_perft(const BState *b, int us, int depth) {
+    int them = 1 - us;
+    uint16_t kingm = b->wk[us] & b->fk[us];
+    int ks = __builtin_ctz(kingm);
+    int in_chk = bst_attacked(b, ks, them);
+    uint16_t promo_rank = (uint16_t)(0xFu << (PROMO_RANK[us] * 4));
+    uint64_t total = 0;
+
+    if (in_chk) {                        /* rare: test every child */
+        uint16_t movers = b->by[us];
+        while (movers) {
+            int s = __builtin_ctz(movers); movers &= movers - 1;
+            uint16_t tg = bst_targets(b, us, s);
+            int is_p = (b->pawns[us] >> s) & 1;
+            while (tg) {
+                int to = __builtin_ctz(tg); tg &= tg - 1;
+                int promo = is_p && ((promo_rank >> to) & 1);
+                int myks = s == ks ? to : ks;
+                if (depth == 1) {
+                    BState c = *b; bst_move(&c, us, s, to, promo ? F : 0);
+                    if (!bst_attacked(&c, myks, them)) total += promo ? 3 : 1;
+                } else if (promo) {
+                    for (int pc = F; pc <= W; pc++) {
+                        BState c = *b; bst_move(&c, us, s, to, pc);
+                        if (!bst_attacked(&c, myks, them)) total += bst_perft(&c, them, depth - 1);
+                    }
+                } else {
+                    BState c = *b; bst_move(&c, us, s, to, 0);
+                    if (!bst_attacked(&c, myks, them)) total += bst_perft(&c, them, depth - 1);
+                }
+            }
+        }
+        uint16_t empt = (uint16_t)~b->occ;
+        for (int t = 0; t < 4; t++) {
+            if (!b->hands[us][t]) continue;
+            uint16_t e = t == P ? (uint16_t)(empt & ~BB_BACKRANKS) : empt;
+            while (e) {
+                int to = __builtin_ctz(e); e &= e - 1;
+                BState c = *b;
+                c.occ |= 1u << to; c.by[us] |= 1u << to;
+                if (t == P) c.pawns[us] |= 1u << to;
+                else if (t == U) c.maos[us] |= 1u << to;
+                else if (t == W) c.wk[us] |= 1u << to;
+                else c.fk[us] |= 1u << to;
+                c.hands[us][t]--;
+                if (!bst_attacked(&c, ks, them))
+                    total += depth == 1 ? 1 : bst_perft(&c, them, depth - 1);
+            }
+        }
+        return total;
+    }
+
+    /* not in check: only king moves and mao-leg vacations can be illegal */
+    uint16_t risky = kingm;
+    if (BB_MAOORIG[ks] & b->maos[them])
+        for (int i = 0; MAO_ATT[ks][i][0] != 0xff; i++)
+            if (((b->maos[them] >> MAO_ATT[ks][i][0]) & 1) && ((b->occ >> MAO_ATT[ks][i][1]) & 1))
+                risky |= 1u << MAO_ATT[ks][i][1];
+
+    uint16_t movers = b->by[us];
+    while (movers) {
+        int s = __builtin_ctz(movers); movers &= movers - 1;
+        uint16_t tg = bst_targets(b, us, s);
+        if (!tg) continue;
+        int is_p = (b->pawns[us] >> s) & 1;
+        int is_risky = (risky >> s) & 1;
+        if (depth == 1 && !is_risky) {
+            if (is_p) {
+                int pr = __builtin_popcount(tg & promo_rank);
+                total += (uint64_t)(__builtin_popcount(tg) - pr) + (uint64_t)pr * 3;
+            } else total += (uint64_t)__builtin_popcount(tg);
+            continue;
+        }
+        while (tg) {
+            int to = __builtin_ctz(tg); tg &= tg - 1;
+            int promo = is_p && ((promo_rank >> to) & 1);
+            int myks = s == ks ? to : ks;
+            if (depth == 1) {            /* risky: one test, promo counts x3 */
+                BState c = *b; bst_move(&c, us, s, to, promo ? F : 0);
+                if (!bst_attacked(&c, myks, them)) total += promo ? 3 : 1;
+            } else if (promo) {
+                for (int pc = F; pc <= W; pc++) {
+                    BState c = *b; bst_move(&c, us, s, to, pc);
+                    if (!is_risky || !bst_attacked(&c, myks, them))
+                        total += bst_perft(&c, them, depth - 1);
+                }
+            } else {
+                BState c = *b; bst_move(&c, us, s, to, 0);
+                if (!is_risky || !bst_attacked(&c, myks, them))
+                    total += bst_perft(&c, them, depth - 1);
+            }
+        }
+    }
+
+    uint16_t empt = (uint16_t)~b->occ;
+    int hp = b->hands[us][P] != 0;
+    int ho = (b->hands[us][F] != 0) + (b->hands[us][U] != 0) + (b->hands[us][W] != 0);
+    if (hp | ho) {
+        if (depth == 1) {
+            total += (uint64_t)ho * __builtin_popcount(empt)
+                   + (uint64_t)hp * __builtin_popcount((uint16_t)(empt & ~BB_BACKRANKS));
+        } else {
+            for (int t = 0; t < 4; t++) {
+                if (!b->hands[us][t]) continue;
+                uint16_t e = t == P ? (uint16_t)(empt & ~BB_BACKRANKS) : empt;
+                while (e) {
+                    int to = __builtin_ctz(e); e &= e - 1;
+                    BState c = *b;
+                    c.occ |= 1u << to; c.by[us] |= 1u << to;
+                    if (t == P) c.pawns[us] |= 1u << to;
+                    else if (t == U) c.maos[us] |= 1u << to;
+                    else if (t == W) c.wk[us] |= 1u << to;
+                    else c.fk[us] |= 1u << to;
+                    c.hands[us][t]--;
+                    total += bst_perft(&c, them, depth - 1);
+                }
+            }
+        }
+    }
+    return total;
+}
+
+uint64_t th_perft_bitboard(THPos *p, int depth) {
+    if (depth == 0) return 1;
+    bb_init();
+    BState b;
+    bst_from(p, &b);
+    return bst_perft(&b, p->stm, depth);
+}
+
+uint64_t th_perft(THPos *p, int depth) {
+#if BITBOARD_PERFT
+    return th_perft_bitboard(p, depth);
+#else
+    return th_perft_mailbox(p, depth);
+#endif
 }
 
 /* Reseed the Zobrist tables. A 64-bit key can collide, and a colliding
