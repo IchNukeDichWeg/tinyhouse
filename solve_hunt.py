@@ -164,6 +164,14 @@ def maybe_grow_tt(growth):
     while want_bits < args.tt and projected > 0.5 * (1 << want_bits):
         want_bits += 1
     if (want_bits > tt_bits_now or occ >= TT_GROW_AT) and tt_bits_now < args.tt:
+        # Multi-worker runs jump STRAIGHT to the cap on the first trigger.
+        # Measured at 6 workers: stepped growth reached the same final size but
+        # drew ~28% more nodes at depth 20 (median 1.41G vs 1.10G over 8 runs
+        # each), because entries lost to replacement in the intermediate tables
+        # are exactly what stops lazy-SMP helpers duplicating work. Single
+        # worker measured no such cost, so stepping stays for workers 1.
+        if args.workers > 1:
+            want_bits = args.tt
         new_bits = min(max(want_bits, tt_bits_now + 1), args.tt)
         want = (1 << new_bits) * 16
         free = free_bytes()

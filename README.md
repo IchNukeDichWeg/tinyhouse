@@ -147,7 +147,10 @@ growth factor; each step rehashes every entry across (the key is recoverable
 from `xkey ^ data`) and prints occupancy, the projection, entries carried and
 the time. Growth is refused with a message when free memory will not cover it,
 so a high cap is safe on a loaded machine — it only materializes if occupancy
-earns it.
+earns it. With `--workers` above 1 the first growth jumps straight to the cap:
+stepping through intermediate sizes measured ~28% more nodes at depth 20,
+because entries lost to replacement in the smaller tables are exactly what
+stops lazy-SMP helpers duplicating work.
 
 What the cap protects against is running *saturated* below it: a 91.7%-full
 table measured 216.6s against 100.3s for the next size up on the same work.
