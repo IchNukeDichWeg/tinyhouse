@@ -1960,3 +1960,40 @@ after `1.Fd1-c2` -- which is a positive disproof of a win, the thing the
 alpha-beta engine structurally cannot produce because its horizon returns an
 unsound 0. That is a real, new, independently cross-checked result about this
 game.
+
+---
+
+## Post-campaign: bitboard search and TT prefetch — both REJECTED
+
+Asked directly: can the solve itself be made faster with the bitboard movegen,
+and how do TT probes get cheaper? Both built, both measured, neither pays.
+
+**Bitboard generation inside `search()`** (BState derived per node; generation,
+in-check test and legality filter all mask-based; mailbox kept authoritative
+for make/unmake and keys). Measured **node-identical on every workload tried**
+-- six real hunts/solves and all 16 regression rows byte-identical -- so wall
+time was the only judge, against a same-build control arm:
+
+| workload | tt | control | bbsearch | prefetch-only | both |
+|---|---|---|---|---|---|
+| hunt d16 White | 2^22 | +0.63% | -0.87% | +0.09% | +0.22% |
+| solve d14 | 2^22 | +0.33% | -0.03% | +0.09% | -0.05% |
+| hunt d16 White | 2^26 | -0.19% | -0.26% | -0.42% | +0.00% |
+
+Everything within or against the noise. The tier-4 profile said movegen is
+~40% of a search node; replacing it with masks moved nothing, which means the
+mailbox generator was never the bottleneck inside the search -- the profile
+measures where time is spent, not what would change if it were removed.
+
+**TT prefetch** (`__builtin_prefetch` on the child's slot at `key_after` time,
+~10-50 ops before the child probes it): NULL at 2^22 where the table is
+cache-resident, and NULL at 2^26 where every probe is a genuine DRAM miss.
+The plausible mechanism for the null: the child's key is computed before
+make(), so the probe's address is available early and an M2-class out-of-order
+window issues the load long before the value gates anything -- the hardware is
+already doing what the hint asks for. Consistent with TH-39's finding that
+node counts stop improving past 2^24: neither capacity nor latency of the
+table is currently binding.
+
+Both live only as scratch builds; nothing shipped, nothing to revert. The
+bitboard stays where it measured 2.1-2.5x: perft.
