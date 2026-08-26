@@ -896,7 +896,7 @@ alone. Depends on TH-37 for costing.
   **100.3s** for `2^24` on the same work.
 - **Do not lower the default on a depth-16 curve.** Add a `--tt` sweep to
   `bench_workers.py` and measure at the depth actually being run. The depth-20 sweep
-  is a long job and is Sam's to run.
+  is a long job and is the maintainer's to run.
 
 ## TH-40 · `/api/analyze` mixes frames: `value` is white-view, `snd` is mover-view
 `opus-5` (32). Verified with a colour-mirrored pair: both return `snd=1`, but for
