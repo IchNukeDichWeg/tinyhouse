@@ -2308,3 +2308,47 @@ Found by re-profiling after the horizon change: `search` self-time stayed at
 51% while pseudo_moves sat at 25.6% and attacked at 15.3%, and the profile
 could not see gives_direct_check because order_score is inlined. The call
 COUNT, not the profile, is what identified it.
+
+## Post-campaign: lazy move generation at the horizon — CONFIRMED (+2.06%)
+
+`horizon_has_move` answers one yes/no question -- is there a legal move -- and
+built the ENTIRE pseudo-move list to do it. Instrumented over a depth-18 hunt:
+
+| | |
+|---|---|
+| horizon nodes | 28,308,177 = **34.2% of all nodes** |
+| answered by HORIZON_FAST_PATH | 10,073,005 = 35.6% |
+| fell back to full generation | 18,235,172 = **64.4%** |
+| moves generated in the fallback | 158,765,117 |
+| moves ever tried | 41,483,858 = **26.1% of generated** |
+| horizon nodes with NO legal move | 289,118 = **1.0%** |
+
+So 74% of generated moves were never looked at, and the answer is "yes" 99% of
+the time. The fix generates a PREFIX first and only builds the rest when the
+prefix yields nothing.
+
+**Deliberately a limit on the one generator, not a second "any legal move"
+routine.** A hand-written second opinion on move legality is exactly what
+produced the double-mao-check bug in this project, and that bug survived 74,702
+walked positions and every perft number. `any_legal` is also shared by both
+passes so they cannot diverge.
+
+Node-identical: only a boolean escapes horizon_has_move. Depth 18, one worker,
+2^24, seven interleaved repeats, same-build control arm:
+
+| arm | cpu | vs control |
+|---|---|---|
+| eager (control A/B) | 13.101s / 13.101s | 0.01% noise floor |
+| limit 2 | 12.740s | +2.84% |
+| **limit 4 (shipped)** | 12.837s | **+2.06%** |
+| limit 6 | 12.808s | +2.29% |
+
+The three limits sit within 0.8% of each other, inside the 4.9-8.0% per-run
+spread, so the limit VALUE is not resolvable here -- only that laziness pays.
+
+**Estimate was wrong and is recorded as such.** Sizing this from the 74% waste
+predicted 4-5%; it measured 2%. The first attempt measured only +1.69% because
+`pseudo_moves` routed through the limit check for every caller, paying a
+per-square branch in the hottest function for a feature only the horizon uses.
+Marking the core always_inline so `limit` constant-folds at both call sites
+recovered the rest.

@@ -290,10 +290,30 @@ static int check_block_square(const THPos *p, int ks, int *sq) {
     return 1;
 }
 
-static int pseudo_moves(const THPos *p, uint16_t *out, int in_check) {
+/*   0  build the whole move list, then look for a legal one (the pin)
+ *   1  build a prefix first; only a prefix that yields nothing forces the rest */
+#define HORIZON_LAZY_GEN 1
+#define HORIZON_GEN_LIMIT 4
+
+/* TH-46: `limit` stops generation once at least that many moves exist, at a
+ * square boundary, and 0 means generate everything. It exists for
+ * horizon_has_move, which asks only "is there a legal move" and measured
+ * 158.8M moves generated against 41.5M ever tried -- 74% built and never
+ * looked at, because the first legal one is found after 2.3 tries on average.
+ *
+ * Deliberately a limit on the ONE generator rather than a second cheaper
+ * "any legal move" routine. A hand-written second opinion on move legality is
+ * exactly what produced the double-mao-check bug in this project, and that one
+ * survived 74,702 walked positions and every perft number. */
+/* always_inline so `limit` is a compile-time constant at both call sites: the
+ * unlimited wrapper below must not pay a per-square branch for a feature only
+ * the horizon uses, and pseudo_moves is the hottest function in the search. */
+static inline __attribute__((always_inline))
+int pseudo_moves_n(const THPos *p, uint16_t *out, int in_check, int limit) {
     int us = p->stm, n = 0;
     const int8_t *b = p->board;
     for (int s = 0; s < 16; s++) {
+        if (limit && n >= limit) return n;
         int pc = b[s];
         if (!pc || COLOR(pc) != us) continue;
         int t = TYPE(pc);
@@ -384,6 +404,15 @@ static int pseudo_moves(const THPos *p, uint16_t *out, int in_check) {
 #endif
     return n;
 }
+
+static int pseudo_moves(const THPos *p, uint16_t *out, int in_check) {
+    return pseudo_moves_n(p, out, in_check, 0);
+}
+
+static int pseudo_moves_prefix(const THPos *p, uint16_t *out, int in_check) {
+    return pseudo_moves_n(p, out, in_check, HORIZON_GEN_LIMIT);
+}
+
 
 /* legal moves; returns count. out may be NULL to just count. */
 int th_moves(THPos *p, uint16_t *out) {
@@ -1004,24 +1033,11 @@ static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks
  *   1  test for the horizon first, and skip the probe there (shipped) */
 #define HORIZON_SKIP_TT 1
 
-static int horizon_has_move(THPos *p, int in_check) {
-#if HORIZON_FAST_PATH
-    if (!in_check) {
-        int us = p->stm;
-        for (int t = 0; t < 4; t++) {
-            if (!p->hands[us][t]) continue;
-            for (int s = 0; s < 16; s++) {
-                if (p->board[s]) continue;
-                if (t == P && ((s >> 2) == 0 || (s >> 2) == 3)) continue;
-                return 1;
-            }
-        }
-    }
-#else
-    (void)in_check;
-#endif
-    uint16_t buf[128];
-    int n = pseudo_moves(p, buf, in_check);
+/* Enough to cover the first legal move nearly always: the fallback below tries
+ * 2.3 moves on average before one is legal. Overshoots to a square boundary. */
+
+/* The legality test, shared by both passes so they cannot diverge. */
+static int any_legal(THPos *p, const uint16_t *buf, int n) {
     Undo u;
 #if KING_SQ_HOIST
     int ks = king_sq(p, p->stm);
@@ -1039,6 +1055,40 @@ static int horizon_has_move(THPos *p, int in_check) {
         if (ok) return 1;
     }
     return 0;
+}
+
+static int horizon_has_move(THPos *p, int in_check) {
+#if HORIZON_FAST_PATH
+    if (!in_check) {
+        int us = p->stm;
+        for (int t = 0; t < 4; t++) {
+            if (!p->hands[us][t]) continue;
+            for (int s = 0; s < 16; s++) {
+                if (p->board[s]) continue;
+                if (t == P && ((s >> 2) == 0 || (s >> 2) == 3)) continue;
+                return 1;
+            }
+        }
+    }
+#else
+    (void)in_check;
+#endif
+    uint16_t buf[128];
+    /* Generate a prefix first. If it holds a legal move -- it nearly always
+     * does -- the rest was never worth building. Only a prefix that yields
+     * nothing forces the full list, and "no legal move at all" is 1.0% of
+     * horizon nodes. Regenerating from scratch there re-tests the prefix, which
+     * is the cheap side of the trade. */
+#if HORIZON_LAZY_GEN
+    int n = pseudo_moves_prefix(p, buf, in_check);
+    if (any_legal(p, buf, n)) return 1;
+    if (n < HORIZON_GEN_LIMIT) return 0;      /* generation ran to completion */
+    n = pseudo_moves(p, buf, in_check);
+    return any_legal(p, buf, n);
+#else
+    int n = pseudo_moves(p, buf, in_check);
+    return any_legal(p, buf, n);
+#endif
 }
 
 static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, uint64_t key) {
