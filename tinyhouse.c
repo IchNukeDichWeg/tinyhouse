@@ -932,6 +932,33 @@ static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks
  *   1 = shipped */
 #define HORIZON_FAST_PATH 1
 
+/* TH-42: the horizon probed the transposition table before noticing it was a
+ * horizon node, and horizon nodes NEVER store (they return before the store
+ * block). So the most numerous class of node in the tree paid a full probe -
+ * a DRAM and TLB miss on a multi-GiB table - and wrote nothing back. Since
+ * HORIZON_FAST_PATH the answer it wants is a cheap local computation, so the
+ * lookup can easily cost more than the thing it looks up.
+ *
+ * Expected to be node-changing, and measured NOT to be: node counts are
+ * identical arm to arm, and the frozen regression suite matches to the row.
+ * The reason is TT_BUDGET_GUARD, which already refuses any mate cutoff whose
+ * distance overruns the remaining budget - at depth <= 0 that refuses every
+ * one of them. So the only cutoffs the horizon probe could still take returned
+ * the same value the horizon computes for itself. It was pure cost.
+ *
+ * That makes this Class A, so nps is a valid judge here (same nodes, less
+ * time) where it is misleading almost everywhere else in this file.
+ *
+ * Measured, solve_hunt to depth 18, one worker, table pinned at 2^30 so probes
+ * are genuine DRAM misses, three interleaved repeats, node-identical at
+ * 69,529,202: 13.8s against 15.7s, -12.1% time and +13.0% nps. At 2^20 the
+ * same A/B measured nothing, because the probe being removed was
+ * cache-resident - the win scales with table size, so it compounds with the
+ * multi-GiB tables the deep hunts actually use.
+ *   0  probe first, then test for the horizon (pre-change pin)
+ *   1  test for the horizon first, and skip the probe there (shipped) */
+#define HORIZON_SKIP_TT 1
+
 static int horizon_has_move(THPos *p, int in_check) {
 #if HORIZON_FAST_PATH
     if (!in_check) {
@@ -1004,6 +1031,14 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
     if (ply >= MAXPLY - 2) return 0;
     path[ply] = key;
 
+#if HORIZON_SKIP_TT
+    if (depth <= 0) {
+        int in_chk0 = th_in_check(p, p->stm);
+        if (horizon_has_move(p, in_chk0)) return 0;   /* unknown: no soundness */
+        si->snd = SND_LB | SND_UB;
+        return in_chk0 ? -(MATE - ply) : (MATE - ply);
+    }
+#endif
     uint16_t ttm = 0;
     TTView tv;
     int tv_hit = tt_probe(key, &tv);
@@ -1027,12 +1062,14 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 
     Undo u;
     int any = 0;
+#if !HORIZON_SKIP_TT
     if (depth <= 0) {
         int in_chk = th_in_check(p, p->stm);
         if (horizon_has_move(p, in_chk)) return 0;   /* unknown: no soundness */
         si->snd = SND_LB | SND_UB;
         return in_chk ? -(MATE - ply) : (MATE - ply);
     }
+#endif
 
     uint16_t buf[128];
 #if DROP_CHECK_PRUNE_IN_SEARCH

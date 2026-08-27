@@ -2142,3 +2142,47 @@ Depth 26 projects to ~130G nodes and ~40 minutes at x4.4, against the
 projection crosses a saturation boundary and the last one of those was wrong
 by 3x, so it is a prediction to be checked, not a number to plan around. The
 table is already 100% full at depth 24, so `--tt 31` is the setting to use.
+
+## Post-campaign: stop probing the table at horizon nodes — CONFIRMED
+
+`search()` probed the transposition table before testing `depth <= 0`, so every
+horizon node paid a full probe. Horizon nodes are the most numerous class in
+the tree and they NEVER store: they return before the store block. The largest
+group of probes in the search was write-only-never, on a table where a probe is
+a DRAM and TLB miss.
+
+Expected to be node-changing, since a stored entry can carry a proven mate
+distance the horizon cannot derive. Measured node-IDENTICAL, arm to arm and
+against the frozen suite. TT_BUDGET_GUARD (THB-01) already refuses any mate
+cutoff whose distance overruns the remaining budget, and at depth <= 0 that is
+every one of them, so the surviving cutoffs only ever returned what the horizon
+computes anyway. Pure cost, no benefit. Class A.
+
+Measured on solve_hunt to depth 18, one worker, table pinned at 2^30 so probes
+miss, three interleaved repeats, nodes identical at 69,529,202:
+
+| | time | nps |
+|---|---|---|
+| HORIZON_SKIP_TT 1 | 14.1 / 13.8 / **13.8s** | **5.03M** |
+| HORIZON_SKIP_TT 0 | 15.8 / 15.7 / **15.7s** | 4.45M |
+
+**-12.1% time, +13.0% nps.** The same A/B at 2^20 measured nothing: the probe
+being removed was cache-resident there. The win scales with table size, so it
+compounds with the multi-GiB tables the deep hunts use, and the depth-18 figure
+is a floor for what depth 24 should see rather than an estimate of it.
+
+This is the one change in this session where nps is the honest metric, because
+the node count is pinned. Everywhere else it moved opposite to time.
+
+**Two table ideas closed alongside it.** Shrinking TTEntry from 16 bytes to 8
+would double capacity, but the payload only compresses to 37 bits (value 16,
+move 11, depth 6, flag 2, sound 2), leaving 27 bits for the key check against
+today's 64. At ~3e10 probes that is roughly 1,800 expected false hits per
+depth-24 run against effectively zero now, and a false hit returns another
+position's bound, which can prune a subtree holding a mate. The 64-bit key is
+the sole documented soundness residual on every published bound; capacity is
+not worth spending it. Tagging entries as invalidated by pawn moves fails for
+the same reason TH-38 did: pawn drops are legal on ranks 2 and 3, exactly the
+range a pawn advances through, so a pawn captured on rank 3 can be dropped back
+on rank 2 and the earlier position recurs in full. Crazyhouse conserves
+everything, so there is no monotone axis to age against.
