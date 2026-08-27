@@ -102,31 +102,39 @@ Run them one after the other; two concurrent 16-worker hunts would oversubscribe
 even an 18-core machine.
 
 Measured, White from the start position, 16 workers, `--tt 30`, on an 18-core M5 Pro
-(one run, not a median):
+(one run per build, not medians). The two columns are the direct-mapped table and the
+4-way bucketed one that replaced it:
 
-| depth | 18 | 20 | 22 | 24 |
-|---|---|---|---|---|
-| nodes | 205M | 1.39G | 7.85G | 119G |
-| time | 3.6s | 24.3s | 133.1s | 1990.2s |
-| growth over previous | x7.4 | x6.8 | x5.6 | **x15.2** |
-| table occupancy after | 2% | 13% | 54% | **100%** |
+| depth | 18 | 20 | 22 | 24 | total |
+|---|---|---|---|---|---|
+| nodes, direct-mapped | 205M | 1.39G | 7.85G | 119G | 128.6G |
+| nodes, bucketed | 249M | 1.42G | 6.73G | **29.4G** | **37.8G** |
+| time, direct-mapped | 3.6s | 24.3s | 133.1s | 1990.2s | 35.9 min |
+| time, bucketed | 4.4s | 25.4s | 119.6s | **548.5s** | **11.6 min** |
+| growth, direct-mapped | x7.4 | x6.8 | x5.6 | **x15.2** | |
+| growth, bucketed | x8.9 | x5.7 | x4.7 | **x4.4** | |
+| occupancy after | 2% | 14% | 64% | **100%** | |
 
-The whole run to depth 24 was 128.6G nodes in 35.9 minutes at about 60 Mnps. That is
-well under the 70 minutes for depth 24 alone that this file used to extrapolate from
-six workers on the old 10-core box, so treat the old figure as retired rather than
-merely beaten: it was a different machine, a different worker count and an older build.
+**x3.08 overall, and the entire win is at depth 24.** Depths 18-20 sit at 2-14%
+occupancy, where a bucket nearly always has a free slot, so bucketing does nothing and
+what you see is 16-worker nondeterminism. Depth 24 runs at 100% occupancy, which is
+the only place associativity can pay.
 
-**Read the last two rows together.** The per-2-ply node growth factor had been falling
-(x7.4, x6.8, x5.6) and then tripled to x15.2 at exactly the depth where the table
-filled. That is consistent with saturation forcing re-search, and it matches the
-directly measured saturation penalty quoted under `--tt` below, but it is a
-correlation from a single run and not a controlled A/B, so do not quote x15.2 as the
-cost of a full table.
+**The growth explosion was replacement thrashing, not tree growth.** The direct-mapped
+run's factor fell x7.4, x6.8, x5.6 and then tripled to x15.2 the moment the table
+filled; the bucketed run goes x8.9, x5.7, x4.7, x4.4 and is still falling. The x15.2
+was recorded here as "consistent with saturation, not evidence for it" pending a
+controlled comparison. This is that comparison.
 
-The practical consequence is that depth 26 is not a 2x step. Extrapolating x15 off
-119G puts it near 1.8 trillion nodes, which at 60 Mnps is upwards of 8 hours even
-before whatever extra a saturated 2^31 table costs. Hence `--tt 31` above, and hence
-running it on an otherwise idle machine.
+NPS fell from 59.83M to 53.62M across the same change. It is not the metric; see the
+sweep under `--tt` below, where the fastest table in the file posts the highest nps and
+takes four times as long.
+
+Depth 26 is now plausible rather than an overnight job: x4.4 off 29.4G projects near
+130G nodes, roughly 40 minutes at this rate. Treat that as an extrapolation across a
+saturation boundary, which is exactly the kind that just proved wrong by a factor of
+three -- the table is already 100% full at depth 24, so `--tt 31` is the sensible
+setting and the real number will come from running it.
 
 `color 0` hunts a White forced win and `1` hunts Black. `--tt BITS` is log2 of a
 CAP on transposition-table entries, so 28 caps at 4 GiB — see below; it is not an

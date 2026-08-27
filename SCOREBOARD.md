@@ -2095,3 +2095,50 @@ iterations, and root_search bumps the generation once per call so aging never
 fired at all. The verdicts above are from solve_hunt, which deepens
 iteratively over one table. bench_ab.py remains right for node-identical
 per-node changes and wrong for anything about the table's contents.
+
+## Post-campaign: bucketing measured on the real workload — x3.08 to depth 24
+
+The controlled follow-up to the x15.2 growth factor recorded two sections above
+as "consistent with saturation, not evidence for it". Same command both times
+(`solve_hunt.py 0 --tt 30 --workers 16 --maxdepth 24`), same machine, one run
+per build, differing only in TT_BUCKETS.
+
+| depth | 18 | 20 | 22 | 24 | total |
+|---|---|---|---|---|---|
+| nodes, direct | 204,891,546 | 1,394,397,984 | 7,848,706,198 | 119,073,867,480 | 128.55G |
+| nodes, bucketed | 249,483,005 | 1,422,108,390 | 6,732,390,460 | **29,410,245,520** | **37.85G** |
+| time, direct | 3.6s | 24.3s | 133.1s | 1990.2s | 35.9 min |
+| time, bucketed | 4.4s | 25.4s | 119.6s | **548.5s** | **11.6 min** |
+| growth, direct | x7.4 | x6.8 | x5.6 | **x15.2** | |
+| growth, bucketed | x8.9 | x5.7 | x4.7 | **x4.4** | |
+| occupancy after | 2% | 14% | 64% | **100%** | |
+
+**x3.08 overall; x3.63 at depth 24 alone, on 4.05x fewer nodes.**
+
+**The win is entirely where the mechanism says it must be.** Depths 18-20 run
+at 2-14% occupancy, where a 4-way bucket nearly always finds a free slot and
+behaves like the direct-mapped table; the +21.8% at depth 18 is 16-worker
+nondeterminism, not a regression. Depth 24 is the only depth at 100%
+occupancy, and it is the only depth that moves. A change that helped
+everywhere equally would have been evidence of something else.
+
+**The x15.2 is explained and retired.** It was replacement thrashing, not tree
+growth: with associativity the factor falls monotonically (x8.9, x5.7, x4.7,
+x4.4) instead of tripling at saturation. The earlier hedge -- that some of
+x15.2 was real tree growth and nobody had separated the two -- resolves as
+almost all of it being thrashing.
+
+**NPS fell from 59.83M to 53.62M while the run got 3.08x faster.** Fourth
+instance in this session of throughput moving opposite to time. Recorded
+because it is now the most extreme one: a 3x speedup that a nps-based
+acceptance test would have rejected.
+
+**Corroboration, not just speed.** The depth-24 bound now rests on two
+independent builds whose node counts differ by 4x. A defect in the
+direct-mapped replacement policy cannot have produced both.
+
+Depth 26 projects to ~130G nodes and ~40 minutes at x4.4, against the
+"upwards of 8 hours" this file carried when the projection used x15. That
+projection crosses a saturation boundary and the last one of those was wrong
+by 3x, so it is a prediction to be checked, not a number to plan around. The
+table is already 100% full at depth 24, so `--tt 31` is the setting to use.

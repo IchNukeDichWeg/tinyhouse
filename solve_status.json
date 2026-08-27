@@ -6,13 +6,13 @@
     {
       "claim": "no forced WHITE win within 24 plies",
       "depth": 24,
-      "nodes": 119073867480,
-      "nodes_note": "the depth-24 slice; the whole iteratively-deepened run from depth 6 was 128553886981 nodes in 2151.8s (35.9 min)",
-      "seconds": 1990.2,
+      "nodes": 29410245520,
+      "nodes_note": "the depth-24 slice; the whole iteratively-deepened run from depth 6 was 37,847,112,002 nodes in 698.5s (11.6 min). Re-proved on the post-bucketing build: the same bound was first taken at 119,073,867,480 nodes / 1990.2s under the direct-mapped table, so the claim now rests on two independent builds with node counts differing 4x.",
+      "seconds": 548.5,
       "method": "null-window mate hunt, iterative deepening in one process from depth 6 in steps of 2",
       "workers": 16,
       "tt": "cap 2^30 (16 GiB), grown from 2^20; reached 100% occupancy at depth 24",
-      "build": 15349806521889203565,
+      "build": 4903809728580668918,
       "machine": "Apple M5 Pro, 18 cores, 64 GiB, macOS (Darwin 25.6.0)",
       "supersedes": "the earlier depth-20 White bound (728,842,906 nodes) taken on the 10-core M2 Pro under an older build"
     },
