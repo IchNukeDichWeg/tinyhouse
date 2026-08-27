@@ -2352,3 +2352,85 @@ predicted 4-5%; it measured 2%. The first attempt measured only +1.69% because
 per-square branch in the hottest function for a feature only the horizon uses.
 Marking the core always_inline so `limit` constant-folds at both call sites
 recovered the rest.
+
+## Post-campaign: the interior node — CONFIRMED (+10.97%)
+
+The horizon had been worked twice, so this pass instrumented the INTERIOR node
+instead. Depth-18 hunt, one worker, 2^24, 82,712,965 nodes of which 39,643,912
+are interior:
+
+| | per interior node | total |
+|---|---|---|
+| moves generated | 16.68 | 661,321,697 |
+| `order_score` calls | 16.68 | 661,321,697 |
+| selection-sort comparisons | **30.82** | **1,221,861,665** |
+| moves actually searched | 2.09 | 82,712,964 |
+| moves found illegal | 0.77 | 30,589,281 |
+| repetition-scan iterations | 14.69 (7.04 per node) | **582,301,361** |
+| repetition-scan HITS | | **78,141** |
+| TT move present | 0.03 | 1,145,298 |
+
+Two numbers set the agenda. **99.6% of cutoffs are taken on the first searched
+move**, and the repetition scan yields 0.013%.
+
+### TH-51 · fuse the first max-scan into the scoring pass — CONFIRMED
+
+The scoring loop and the sort's first pass walk the same array asking the same
+question, and that first pass is the one that nearly always decides the node.
+Tracking the running maximum while scoring drops n-1 of the 30.8 comparisons.
+
+Node identity rests entirely on the tie-break: `>` keeps the FIRST index
+holding the maximum, exactly as the sort did. Ties are common (equal history,
+usually 0), so `>=` would have silently reordered the tree while looking
+correct.
+
+### TH-52 · one in-check test per node — CONFIRMED, and it revives a rejected toggle
+
+`FAST_LEGALITY_IN_SEARCH` was measured neutral-to-negative and left off. The
+reason was not the shortcut: `DROP_CHECK_PRUNE_IN_SEARCH` already calls
+`attacked()` on the mover's king, and the toggle called `attacked()` on the
+same square with the same arguments a few lines later, `king_sq()` doubled the
+same way. Hoisting both to one computation turns it positive.
+
+**A toggle measured negative can be negative for a reason that has nothing to
+do with the idea in it.** This one sat rejected while its cost was a duplicated
+line, not the shortcut it was testing.
+
+### TH-50 · Bloom-gate the repetition scan — CONFIRMED, and small
+
+582M iterations for 78,141 hits looked like the obvious target. A 64-bit Bloom
+filter of the path keys skips ~80% of the loops and bought +0.89% against a
+0.74% floor. The loop was already L1-resident and well predicted, so there was
+never much there. Kept because it is free of risk and grows with depth.
+
+### The measurement, and a false reading it produced first
+
+| arm | cpu | vs baseA |
+|---|---|---|
+| baseA / baseB | 12.318s / 12.228s | **0.74% floor** |
+| Bloom-gated rep scan | 12.210s | +0.89% |
+| fused max-scan | 11.361s | **+8.42%** |
+| both | 11.244s | +9.56% |
+| + fast legality in search | 11.101s | **+10.97%** |
+
+Depth 18, one worker, 2^24, 11 interleaved repeats, first discarded. Nodes
+identical at 82,712,965 across all six arms; perft(7) 1,355,253; regress digest
+811f304f1eef7998 unchanged.
+
+**The first run of this A/B was taken on a loaded machine and read the Bloom
+gate at +3.55%, four times its real value.** Load average was 25 with seven
+other processes at ~125% CPU; per-run spread was 35% and the control floor
+2.71%. An earlier 5-repeat pass on the same busy machine had the Bloom gate at
+**-2.76%**, i.e. the wrong sign. The interleaving keeps the control floor
+honest but it cannot manufacture resolution that is not in the samples.
+`time.process_time` is not load-proof either -- shared LLC and memory bandwidth
+still move it.
+
+### What is left in the interior node
+
+Movegen still builds 16.68 moves to search 2.09, and 82.9% of generated moves
+are never tried. That is the biggest remaining block and it is what staged
+generation (TH-15, closed at a ~1.5% ceiling) was aimed at. The TT move is
+present at only 2.9% of interior nodes at 2^24 with one worker, so the ordering
+statistics above are NOT the deep-hunt operating point and should be re-taken
+at 2^30 / 16 workers before anything is designed on them.
