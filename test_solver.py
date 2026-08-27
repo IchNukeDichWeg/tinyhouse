@@ -912,3 +912,65 @@ def test_solve_hunt_grows_and_resumes_across_the_growth(tmp_path):
     second = hunt(16)
     assert "resumed from" in second and "table reloaded" in second
     assert "depth 16" in second
+
+
+def _solve_hunt_symbol(name):
+    """solve_hunt.py parses argv at import, so pull one function out by source.
+
+    Ugly on purpose and cheaper than restructuring the script: these two are
+    pure formatting/arithmetic helpers with no module state.
+    """
+    import re
+    src = (DIR / "solve_hunt.py").read_text()
+    ns = {}
+    exec(re.search(r"def fmt\(.*?\n\n", src, re.S).group(0), ns)
+    exec(re.search(r"def %s\(.*?\n\n\n" % name, src, re.S).group(0), ns)
+    return ns[name]
+
+
+def test_progress_line_admits_when_it_passes_its_estimate():
+    """A wrong ETA is worse than none: it decides whether a person waits or kills.
+
+    The old form clamped to min(n/est, 0.99) and max(est-n, 0), so once the run
+    passed its estimate it printed "~99% ... eta ~0m" and held there. Observed
+    on a Black hunt sitting at 101.91G nodes against a 20.51G estimate for over
+    a thousand seconds, reading as "nearly done" the whole time.
+    """
+    pl = _solve_hunt_symbol("progress_line")
+
+    early = pl(24, 5_000_000_000, 90e6, 55, 20_510_000_000)
+    assert "24% of est" in early and "eta ~" in early
+
+    # the exact observed case
+    past = pl(24, 101_910_000_000, 92.43e6, 1103, 20_510_000_000)
+    assert "eta unknown" in past, past
+    assert "99%" not in past and "eta ~0m" not in past, past
+    assert "5.0x" in past, past
+
+    assert "est" not in pl(6, 4000, 1e6, 0.1, None)      # no estimate at the first depth
+
+
+@pytest.mark.slow
+def test_tt_growth_steps_down_when_the_target_will_not_fit(tmp_path):
+    """Refusing to grow is catastrophic, not conservative.
+
+    A Black hunt asked for 2^31 (32.0 GiB) with 35.3 GiB free, missed the 0.9
+    headroom test by 0.2 GiB, and stayed at the 2^20 START size -- then searched
+    depth 24 through a 16 MiB table for 101.91G nodes, against 24.5G for the
+    same depth on a right-sized one. A smaller growth would have fitted with
+    room to spare, so the fix steps down instead of giving up.
+
+    --tt 34 (256 GiB) cannot fit on any machine this runs on, which is what
+    makes the assertion machine-independent.
+    """
+    out = subprocess.run(
+        [sys.executable, str(DIR / "solve_hunt.py"), "1", "--tt", "34", "--force-tt",
+         "--workers", "2", "--maxdepth", "16", "--fresh",
+         "--state", str(tmp_path / "s.json")],
+        capture_output=True, text=True, timeout=600)
+    assert out.returncode == 0, out.stderr
+    assert "instead" in out.stdout, out.stdout          # stepped down rather than refusing
+    assert "grew to 2^" in out.stdout, out.stdout       # and actually grew
+    grew = [l for l in out.stdout.splitlines() if "grew to 2^" in l]
+    got = int(grew[0].split("grew to 2^")[1].split()[0])
+    assert got > 20, f"stayed at or near the start size: {grew[0]}"

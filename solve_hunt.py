@@ -186,13 +186,27 @@ def maybe_grow_tt(growth):
         if args.workers > 1 and args.tt_growth == "jump":
             want_bits = args.tt
         new_bits = min(max(want_bits, tt_bits_now + 1), args.tt)
-        want = (1 << new_bits) * 16
+        # Step DOWN to the largest size that fits rather than refusing to grow.
+        # Refusing outright is catastrophic, not conservative: a Black hunt with
+        # 35.3 GiB free missed a 32.0 GiB target by 0.2 GiB and stayed at the
+        # 2^20 START size, then searched depth 24 through a 16 MiB table and
+        # drew 101.91G nodes where the same depth costs 24.5G on a right-sized
+        # one. 2^30 would have fitted with 19 GiB to spare.
         free = free_bytes()
-        if free and want > free * 0.9:
-            print(line + f" -- growth to 2^{new_bits} needs "
-                  f"{want / 2**30:.1f} GiB but only ~{free / 2**30:.1f} GiB is free; "
-                  f"staying at 2^{tt_bits_now}", flush=True)
+        capped = new_bits
+        while free and (1 << new_bits) * 16 > free * 0.9 and new_bits > tt_bits_now:
+            new_bits -= 1
+        if new_bits <= tt_bits_now:
+            print(line + f" -- growth to 2^{capped} needs "
+                  f"{(1 << capped) * 16 / 2**30:.1f} GiB, only ~{free / 2**30:.1f} GiB free, "
+                  f"and no smaller size beats the current 2^{tt_bits_now}; staying put",
+                  flush=True)
             return
+        if new_bits < capped:
+            print(line + f" -- 2^{capped} needs {(1 << capped) * 16 / 2**30:.1f} GiB "
+                  f"but only ~{free / 2**30:.1f} GiB is free; growing to 2^{new_bits} "
+                  f"({(1 << new_bits) * 16 / 2**30:.2f} GiB) instead", flush=True)
+        want = (1 << new_bits) * 16
         t0 = time.perf_counter()
         if E.lib.th_tt_grow(new_bits) != 0:
             print(line + f" -- growth to 2^{new_bits} failed to allocate; "
@@ -321,6 +335,29 @@ def fmt(n):
 
 
 start_depth = max(6, state["proven_no_win_through"] + 2)
+def progress_line(d, n, nps, dt, est):
+    """One live progress line for the depth in flight.
+
+    Once the run passes its estimate the line says SO, rather than clamping to
+    "99% ... eta ~0m" and holding there. The old form did exactly that for over
+    a thousand seconds on a Black hunt whose estimate was 5x low, which reads
+    as "nearly done" when the truth is "this estimate is worthless". A wrong
+    ETA is worse than no ETA: it is the one number a person uses to decide
+    whether to wait or kill the run.
+
+    The estimate is prev_depth_nodes * growth, and growth is measured from the
+    depth before that, so it is only ever a guess -- a table that saturates
+    mid-depth breaks it badly, which is precisely when the run is slowest and
+    the ETA matters most.
+    """
+    line = f"  d{d}  {fmt(n)} nodes  {fmt(nps)}nps  {dt:6.0f}s"
+    if not est:
+        return line
+    if n < est:
+        return line + f"  ~{n/est*100:2.0f}% of est {fmt(est)}  eta ~{(est-n)/max(nps,1)/60:.0f}m"
+    return line + f"  PAST est {fmt(est)} by {n/est:.1f}x  eta unknown"
+
+
 for d in range(start_depth, args.maxdepth + 1, 2):
     t0 = time.perf_counter()
     n0 = E.lib.th_nodes()
@@ -339,11 +376,8 @@ for d in range(start_depth, args.maxdepth + 1, 2):
         n = E.lib.th_nodes() - n0
         dt = time.perf_counter() - t0
         nps = n / max(dt, 1e-9)
-        line = f"  d{d}  {fmt(n)} nodes  {fmt(nps)}nps  {dt:6.0f}s"
-        if est:
-            line += (f"  ~{min(n/est,0.99)*100:2.0f}% of est {fmt(est)}"
-                     f"  eta ~{max(est-n,0)/max(nps,1)/60:.0f}m")
-        print("\r" + line + "  ", end="" if tty else "\n", flush=True)
+        print("\r" + progress_line(d, n, nps, dt, est) + "  ",
+              end="" if tty else "\n", flush=True)
     th.join()
     dt = time.perf_counter() - t0
     n = E.lib.th_nodes() - n0
