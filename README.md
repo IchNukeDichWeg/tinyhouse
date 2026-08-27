@@ -91,16 +91,42 @@ under a second seed matters for the bounds as much as for the wins.
 summary line per completed depth.
 
 ```bash
-.venv/bin/python solve_hunt.py 0 --tt 28 --workers 16 --maxdepth 26
+.venv/bin/python solve_hunt.py 0 --tt 31 --workers 16 --maxdepth 26
 ```
 
 ```bash
-.venv/bin/python solve_hunt.py 1 --tt 28 --workers 16 --maxdepth 28
+.venv/bin/python solve_hunt.py 1 --tt 31 --workers 16 --maxdepth 28
 ```
 
-Run them one after the other. Six workers each would oversubscribe a 10-core machine.
-At six workers, depth 22 takes roughly 9 minutes, depth 24 about 70, and depth 26
-somewhere near 9 or 10 hours.
+Run them one after the other; two concurrent 16-worker hunts would oversubscribe
+even an 18-core machine.
+
+Measured, White from the start position, 16 workers, `--tt 30`, on an 18-core M5 Pro
+(one run, not a median):
+
+| depth | 18 | 20 | 22 | 24 |
+|---|---|---|---|---|
+| nodes | 205M | 1.39G | 7.85G | 119G |
+| time | 3.6s | 24.3s | 133.1s | 1990.2s |
+| growth over previous | x7.4 | x6.8 | x5.6 | **x15.2** |
+| table occupancy after | 2% | 13% | 54% | **100%** |
+
+The whole run to depth 24 was 128.6G nodes in 35.9 minutes at about 60 Mnps. That is
+well under the 70 minutes for depth 24 alone that this file used to extrapolate from
+six workers on the old 10-core box, so treat the old figure as retired rather than
+merely beaten: it was a different machine, a different worker count and an older build.
+
+**Read the last two rows together.** The per-2-ply node growth factor had been falling
+(x7.4, x6.8, x5.6) and then tripled to x15.2 at exactly the depth where the table
+filled. That is consistent with saturation forcing re-search, and it matches the
+directly measured saturation penalty quoted under `--tt` below, but it is a
+correlation from a single run and not a controlled A/B, so do not quote x15.2 as the
+cost of a full table.
+
+The practical consequence is that depth 26 is not a 2x step. Extrapolating x15 off
+119G puts it near 1.8 trillion nodes, which at 60 Mnps is upwards of 8 hours even
+before whatever extra a saturated 2^31 table costs. Hence `--tt 31` above, and hence
+running it on an otherwise idle machine.
 
 `color 0` hunts a White forced win and `1` hunts Black. `--tt BITS` is log2 of a
 CAP on transposition-table entries, so 28 caps at 4 GiB — see below; it is not an
@@ -184,8 +210,8 @@ checking the growth policy's choices at your real depth:
 
 Written down so nobody has to work it out twice.
 
-The game value itself. Neither side has a forced win within 20 or 22 plies; past that
-it is open. A draw can only be proven where no line still reaches the horizon, which
+The game value itself. Neither side has a forced win within 24 (White) or 22 (Black)
+plies; past that it is open. A draw can only be proven where no line still reaches the horizon, which
 today means bare kings around depth 80 and nothing resembling the start position.
 
 A second-seed re-verification of both published bounds at full depth. The wins have
@@ -193,9 +219,12 @@ been re-verified under `--seed 0xC0FFEE`; the bounds have not, and a Zobrist col
 is the one residual with no directional structure. `solve_hunt.py` prints the command
 when a run ends.
 
-The right `--tt` beyond depth 18, and the right `--workers` beyond depth 20. Both are
-measured up to those depths and no further, and `scripts/bench_workers.py` is the tool
-for going deeper.
+The right `--workers` beyond depth 20, measured there and no further;
+`scripts/bench_workers.py` is the tool for going deeper. `--tt` is better understood
+now — occupancy is recorded to depth 24 and 2^30 saturates there — but nobody has run
+the A/B that would say what a saturated table actually costs at that depth, so the
+choice of 2^31 for depth 26 is reasoning from the depth-20 saturation measurement,
+not a measurement at depth 26.
 
 Any way at all to close the draw claim. `tinyhouse.c` has a df-pn engine with
 Kishimoto-Muller twin entries, validated against the alpha-beta engine over 3,960

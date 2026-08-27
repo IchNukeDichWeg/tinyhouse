@@ -2002,3 +2002,46 @@ table is currently binding.
 
 Both live only as scratch builds; nothing shipped, nothing to revert. The
 bitboard stays where it measured 2.1-2.5x: perft.
+
+## Post-campaign: the WHITE bound to depth 24, and the table saturating
+
+The White bound moved from depth 20 to **depth 24**: no forced White win from
+`fuwk/3p/P3/KWUF[-] w` within 24 plies. One run, 16 workers, `--tt 30` (16 GiB
+cap grown from 2^20), build `15349806521889203565`, Apple M5 Pro 18 cores /
+64 GiB. 128,553,886,981 nodes over the whole iteratively-deepened run in 35.9
+minutes, about 60 Mnps. The old depth-20 White bound is retired, not beaten:
+different machine, different worker count, older build.
+
+| depth | 18 | 20 | 22 | 24 |
+|---|---|---|---|---|
+| nodes | 204,891,546 | 1,394,397,984 | 7,848,706,198 | 119,073,867,480 |
+| seconds | 3.6 | 24.3 | 133.1 | 1990.2 |
+| growth | x7.4 | x6.8 | x5.6 | **x15.2** |
+| occupancy after | 2% | 13% | 54% | **100%** |
+
+**The finding is in the last two rows.** Node growth per 2 plies had been
+*falling* -- 7.4, 6.8, 5.6 -- and then tripled to 15.2 at precisely the depth
+where the table hit 100%. That is what saturation-forced re-search should look
+like, and it agrees in sign and rough magnitude with the one controlled number
+already on record (a 91.7%-full table at 216.6s against 100.3s for the next
+size up, same work). But this is a single uncontrolled run, so the honest
+status is **consistent with, not evidence for**. Some of x15.2 is real tree
+growth; nobody has separated the two. The A/B that would -- depth 24 at 2^30
+against 2^31 -- costs about 70 minutes and has not been run.
+
+**On the choice of 2^30 for this run.** It was picked by inference before the
+fact, not measured, and the run happened to vindicate it arithmetically: depth
+22 wrote 581,931,417 entries, which is 108% of a 2^29 table, so 2^29 would have
+saturated a full depth earlier. That is a reason to believe 30 beat 29 here; it
+is still not an A/B between them.
+
+**Consequence for depth 26.** Extrapolating x15 off 119G gives roughly 1.8
+trillion nodes, upwards of 8 hours at this nps before counting whatever a
+saturated table adds. 2^31 (32 GiB) is the largest the memory guard allows on a
+64 GiB box without `--force-tt`, and it will fill too. The table has stopped
+being a lever that can be pulled much further on this machine.
+
+**Not yet done:** the bound is single-seed. A 64-bit Zobrist collision has no
+directional structure and could have pruned a subtree holding a real mate, so
+the depth-24 claim carries the same unquantified residual as every other bound
+here until it is re-run under `--seed 0xC0FFEE`.
