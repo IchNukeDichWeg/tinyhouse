@@ -85,6 +85,9 @@ ap.add_argument("--seed", type=lambda x: int(x, 0), default=0,
 ap.add_argument("--state", default=None, help="checkpoint path (default solve_state/<hash>.json)")
 ap.add_argument("--force-tt", action="store_true", help="skip the memory sanity check on --tt")
 ap.add_argument("--fresh", action="store_true", help="ignore any existing checkpoint")
+ap.add_argument("--tt-growth", choices=("jump", "step"), default="jump",
+                help="with >1 worker, whether the first growth goes straight to --tt "
+                     "(jump, default) or sizes to the projection (step). See maybe_grow_tt.")
 args = ap.parse_args()
 
 def check_tt_size(bits):
@@ -170,7 +173,17 @@ def maybe_grow_tt(growth):
         # each), because entries lost to replacement in the intermediate tables
         # are exactly what stops lazy-SMP helpers duplicating work. Single
         # worker measured no such cost, so stepping stays for workers 1.
-        if args.workers > 1:
+        #
+        # That justification is STALE and --tt-growth exists to retest it. It
+        # was taken at 6 workers, not the 16 now used, and it reasons about
+        # which entries replacement discards -- which is precisely what the
+        # 4-way bucketed table changed. Blind overwrite and depth-preferred
+        # replacement do not lose the same entries. The cost of jumping also
+        # scales with the cap: at --tt 31 the first growth puts depths 16-20 on
+        # a 32 GiB table at under 7% occupancy, paying full memory latency for
+        # capacity nothing uses until depth 24. Default stays `jump` until a
+        # measurement at 16 workers on the bucketed build says otherwise.
+        if args.workers > 1 and args.tt_growth == "jump":
             want_bits = args.tt
         new_bits = min(max(want_bits, tt_bits_now + 1), args.tt)
         want = (1 << new_bits) * 16
