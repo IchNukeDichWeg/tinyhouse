@@ -2434,3 +2434,62 @@ generation (TH-15, closed at a ~1.5% ceiling) was aimed at. The TT move is
 present at only 2.9% of interior nodes at 2^24 with one worker, so the ordering
 statistics above are NOT the deep-hunt operating point and should be re-taken
 at 2^30 / 16 workers before anything is designed on them.
+
+## Post-campaign: TH-53 · staged quiet drops — REJECTED
+
+The interior-node instrumentation said 13.88 of the 16.68 moves a node
+generates are quiet non-checks, mostly drops, and that 81.1% of cutoffs come
+from a capture or a check. At 86.2% x 81.1% = 70% of interior nodes that whole
+block is generated, scored and never looked at. Deferring it looked like the
+biggest single lever left.
+
+Built as `gen_drops(p, out, sel, eks)` emitting drops in the canonical order
+(type ascending, then square ascending) and filterable to the checking ones or
+the rest, using the SAME masks `gives_direct_check` reads so the generator and
+the ordering cannot disagree about what a checking drop is. `search()` starts
+with piece moves plus checking drops and generates the quiet block only when
+the best remaining move scores below the capture floor of 1<<20 -- or when
+stage A runs out, which happens when every one of its moves was illegal and
+which, missed, reports "no legal move" and invents a mate.
+
+**Not node-identical, and that is what kills it.** Deferring the quiet drops
+puts them at the end of `buf` instead of interleaved with the checking drops,
+and the selection sort resolves ties by array position. Depth 18, one worker,
+2^24, nine interleaved repeats, control floor 0.16%:
+
+| arm | nodes | cpu |
+|---|---|---|
+| base A / B | 82,712,965 | 11.632s / 11.613s |
+| staged | **87,817,720** (+6.2%) | 12.039s (**-3.38%**) |
+
+Per node it is 2.5% faster (140.6 -> 137.1 ns). It searches 6.2% more nodes,
+so it loses.
+
+### What the 2.5% actually means
+
+Skipping 9.7 of 16.68 generated moves at 70% of interior nodes is worth 2.5%.
+**A move that is generated and never searched costs about 2-3 cycles, not the
+10 assumed when sizing this.** The expensive parts of a node -- make/unmake,
+`attacked`, the recursive call -- are already paid only for moves that ARE
+searched, so removing generation volume removes almost nothing.
+
+This is the second independent measurement saying so. The earlier bitboard
+experiment replaced generation, the in-check test AND the legality filter with
+masks inside `search()` and measured node-identical and time-null on six
+workloads. Both results contradict the tier-4 profile's "movegen is ~40% of a
+search node", and both are right: a profile measures where time is spent, not
+what would change if that work were removed.
+
+### The path that would make it node-identical, and why it was not taken
+
+Ties would have to break on something derived from the MOVE rather than its
+array position -- then layout would stop mattering. That is a two-step
+campaign: change the tie-break first (Class B, node effect a coin flip), then
+stage on top of it (Class A). With the ceiling measured at 2.5% per node, it is
+not worth the two measurements.
+
+**Estimate was 4x high, the third time in a row in the same direction.** Sizing
+from waste counts (74% of horizon moves unused -> predicted 4-5%, got 2.06%;
+58% of interior movegen unused -> predicted ~10%, got 2.5%) systematically
+overshoots, because the waste is counted in MOVES and the cost is not
+proportional to moves.
