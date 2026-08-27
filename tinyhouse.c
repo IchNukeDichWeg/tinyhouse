@@ -1212,14 +1212,43 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 #if FAST_LEGALITY_IN_SEARCH
     int in_chk_root = attacked(p, my_ks, 1 - p->stm);
 #endif
+/* TH-51: the scoring pass and the selection sort's FIRST pass are the same
+ * walk over the same array. Instrumented over a depth-18 hunt, an interior
+ * node scores 16.7 moves and then spends 30.8 sort comparisons to search 2.09
+ * of them, and 99.6% of cutoffs are taken on the FIRST searched move -- so the
+ * pass that nearly always decides the node is the one being paid for twice.
+ * Tracking the running maximum while scoring folds the two together and drops
+ * n-1 of those comparisons.
+ *
+ * Tie-break is unchanged, which is what makes this node-identical: `>` keeps
+ * the FIRST index holding the maximum, exactly as the sort did. Ties are
+ * common here (equal history, usually 0), so a `>=` would silently reorder the
+ * tree.
+ *   0  score, then let the sort find the max (the node-identity pin)
+ *   1  fused (shipped, +8.42% against a 0.74% control floor) */
+#define ORDER_FUSED_MAX 1
+
+#if ORDER_FUSED_MAX
+    int bi0 = 0;
+    for (int i = 0; i < n; i++) {
+        scores[i] = order_score(p, buf[i], ttm, ply, enemy_ks);
+        if (scores[i] > scores[bi0]) bi0 = i;
+    }
+#else
     for (int i = 0; i < n; i++) scores[i] = order_score(p, buf[i], ttm, ply, enemy_ks);
+#endif
 
     int best = -MATE, alpha0 = alpha;
     uint16_t bestm = 0;
     int my_rep = MAXPLY;
     uint8_t best_child_ub = 0, all_children_lb = 1, cutoff = 0;
     for (int i = 0; i < n; i++) {
+#if ORDER_FUSED_MAX
+        int bi = i ? i : bi0;
+        if (i)
+#else
         int bi = i;
+#endif
         for (int j = i + 1; j < n; j++) if (scores[j] > scores[bi]) bi = j;
         uint16_t m = buf[bi]; buf[bi] = buf[i]; scores[bi] = scores[i]; buf[i] = m;
         uint64_t ckey = key_after(p, m, key);      /* before make: reads the pre-move board */
