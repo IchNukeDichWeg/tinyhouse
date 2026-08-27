@@ -96,6 +96,45 @@ ap.add_argument("--tt-growth", choices=("jump", "step"), default="jump",
                      "(jump, default) or sizes to the projection (step). See maybe_grow_tt.")
 args = ap.parse_args()
 
+def gib(n):
+    """Bytes as a human size. GiB rounds to nothing below a gigabyte, and these
+    messages are read when someone is deciding whether a run will fit."""
+    return f"{n / 2**30:.1f} GiB" if n >= 2**30 else f"{n / 2**20:.0f} MiB"
+
+
+# TH-44: a jump-mode run ends at --tt regardless, so growing INTO it is pure
+# loss. Growth costs target+held at peak (2^30 -> 2^31 peaks at 48 GiB against
+# the 32 GiB the table actually needs), it can be refused when the same size
+# would have been fine up front, and a refusal then STRANDS the run at whatever
+# intermediate it stepped down to -- a Black hunt reached 2^30 that way and
+# could never afford 2^31 afterwards. Allocating the cap before anything is
+# held costs 32 GiB flat, the floor.
+#
+# What it gives up is TH-39's finding that an oversized table costs time at
+# shallow depths (d16 ran 2.21s at 2^20 against 2.61s at 2^27). Depths 6-16
+# together are under a second of a multi-hour run, so that is ~0.2s against a
+# failure mode that cost a whole depth-28 attempt. Only for jump mode: stepping
+# is the measured choice at one worker and it sizes to the projection anyway.
+def start_bits_for(args):
+    if args.workers > 1 and args.tt_growth == "jump" and args.tt_start < args.tt:
+        cap = (1 << args.tt) * 16
+        # Starting at the cap must clear the SAME memory bar growing into it
+        # does, or this trades a refusal for an allocation that swaps the
+        # machine -- and --force-tt bypasses check_tt_size, so nothing else
+        # stops a 256 GiB request here. When it does not fit, fall back to
+        # --tt-start and let maybe_grow_tt step down as it always did.
+        free = free_bytes()
+        if free and cap > free * 0.9:
+            return args.tt_start, (f"cannot start at the 2^{args.tt} cap: it needs "
+                                   f"{gib(cap)} against ~{gib(free)} free. Starting at "
+                                   f"2^{args.tt_start} and growing instead, which may "
+                                   f"end below the cap")
+        return args.tt, (f"starting at the 2^{args.tt} cap ({gib(cap)}): jump mode ends "
+                         f"there regardless, and growing into it later would peak at "
+                         f"{gib(cap + cap // 2)} and can be refused outright")
+    return args.tt_start, None
+
+
 def check_tt_size(bits):
     """Bound the table against physical RAM BEFORE allocating.
 
@@ -149,7 +188,10 @@ state_path.parent.mkdir(parents=True, exist_ok=True)
 if args.seed:
     E.lib.th_seed(args.seed)
 check_tt_size(args.tt)
-tt_bits_now = min(max(args.tt_start, 12), args.tt)
+_start_bits, _why = start_bits_for(args)
+if _why:
+    print(_why, flush=True)
+tt_bits_now = min(max(_start_bits, 12), args.tt)
 if E.lib.th_tt_init(tt_bits_now) != 0:
     sys.exit(f"could not allocate a 2^{tt_bits_now}-entry table "
              f"({(1 << tt_bits_now) * 16 // 2**20} MiB). Use a smaller --tt-start.")
