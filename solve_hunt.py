@@ -334,6 +334,21 @@ def fmt(n):
     return str(int(n))
 
 
+# TH-43: size the table for the depth about to run, not the one that ended.
+# maybe_grow_tt was called ONLY at the tail of the depth loop, so a resumed run
+# reopened at the checkpoint's tt_bits_now and walked straight into the next
+# depth without ever reconsidering it. That turned a one-off growth refusal
+# into a permanent one: a Black hunt refused 2^31 by 0.2 GiB, checkpointed
+# tt_bits_now=20, and every later resume inherited the 16 MiB table -- depth 24
+# passed 164G nodes still searching through it, and the step-down fix could not
+# help because nothing on the resume path calls it.
+#
+# Sizing here also covers the case the growth policy was never asked about: a
+# machine that has since freed memory, or a --tt raised between runs.
+if state["depths"]:
+    maybe_grow_tt(growth)
+    state["tt_bits_now"] = tt_bits_now
+
 start_depth = max(6, state["proven_no_win_through"] + 2)
 def progress_line(d, n, nps, dt, est):
     """One live progress line for the depth in flight.

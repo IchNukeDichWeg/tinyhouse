@@ -8,6 +8,7 @@ and disappears if a shallower depth ran first in the same process. `_cold()`
 runs a snippet in a fresh interpreter for exactly that reason.
 """
 import struct
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -974,3 +975,44 @@ def test_tt_growth_steps_down_when_the_target_will_not_fit(tmp_path):
     grew = [l for l in out.stdout.splitlines() if "grew to 2^" in l]
     got = int(grew[0].split("grew to 2^")[1].split()[0])
     assert got > 20, f"stayed at or near the start size: {grew[0]}"
+
+
+@pytest.mark.slow
+def test_resume_resizes_the_table_before_the_next_depth(tmp_path):
+    """A growth refusal must not become permanent through the checkpoint.
+
+    maybe_grow_tt was called only at the TAIL of the depth loop, so a resumed
+    run reopened at the checkpoint's tt_bits_now and entered the next depth
+    without reconsidering it. Observed: a Black hunt refused 2^31 by 0.2 GiB,
+    checkpointed tt_bits_now=20, and the restart inherited the 16 MiB table --
+    depth 24 passed 164G nodes still searching through it, against 24.5G for
+    the same depth on a right-sized table. The step-down fix could not help,
+    because nothing on the resume path called it.
+
+    Saturate a 2^20 table, raise the cap, resume: it must grow BEFORE the next
+    depth's first progress line, not after that depth completes.
+    """
+    state = tmp_path / "r.json"
+    first = subprocess.run(
+        [sys.executable, str(DIR / "solve_hunt.py"), "1", "--tt", "20", "--workers", "2",
+         "--maxdepth", "20", "--fresh", "--state", str(state)],
+        capture_output=True, text=True, timeout=1800)
+    assert first.returncode == 0, first.stderr
+    d = json.loads(state.read_text())
+    assert d["tt_bits_now"] == 20, d["tt_bits_now"]
+    d["tt_bits"] = 28                      # as a raised --tt would leave it
+    state.write_text(json.dumps(d))
+
+    out = subprocess.run(
+        [sys.executable, str(DIR / "solve_hunt.py"), "1", "--tt", "28", "--workers", "2",
+         "--maxdepth", "22", "--state", str(state)],
+        capture_output=True, text=True, timeout=1800)
+    assert out.returncode == 0, out.stderr
+    assert "resumed from" in out.stdout
+    grew = [l for l in out.stdout.splitlines() if "grew to 2^" in l]
+    assert grew, f"resume did not resize a saturated table:\n{out.stdout}"
+    # and it happened before any depth-22 work, not after the depth finished
+    body = out.stdout.split("grew to 2^")[0]
+    assert "d22" not in body and "depth 22" not in body, \
+        f"table grew only AFTER depth 22 ran:\n{out.stdout}"
+    assert json.loads(state.read_text())["tt_bits_now"] > 20
