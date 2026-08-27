@@ -966,7 +966,7 @@ def test_tt_growth_steps_down_when_the_target_will_not_fit(tmp_path):
     """
     out = subprocess.run(
         [sys.executable, str(DIR / "solve_hunt.py"), "1", "--tt", "34", "--force-tt",
-         "--workers", "2", "--maxdepth", "16", "--fresh",
+         "--workers", "2", "--maxdepth", "16", "--fresh", "--no-tt-dump",
          "--state", str(tmp_path / "s.json")],
         capture_output=True, text=True, timeout=600)
     assert out.returncode == 0, out.stderr
@@ -1005,7 +1005,7 @@ def test_resume_resizes_the_table_before_the_next_depth(tmp_path):
 
     out = subprocess.run(
         [sys.executable, str(DIR / "solve_hunt.py"), "1", "--tt", "28", "--workers", "2",
-         "--maxdepth", "22", "--state", str(state)],
+         "--maxdepth", "22", "--no-tt-dump", "--state", str(state)],
         capture_output=True, text=True, timeout=1800)
     assert out.returncode == 0, out.stderr
     assert "resumed from" in out.stdout

@@ -91,6 +91,12 @@ ap.add_argument("--seed", type=lambda x: int(x, 0), default=0,
 ap.add_argument("--state", default=None, help="checkpoint path (default solve_state/<hash>.json)")
 ap.add_argument("--force-tt", action="store_true", help="skip the memory sanity check on --tt")
 ap.add_argument("--fresh", action="store_true", help="ignore any existing checkpoint")
+ap.add_argument("--no-tt-dump", action="store_true",
+                help="record proven depths but never write the table dump. The dump is "
+                     "the SAME SIZE as the table, written once per completed depth, so a "
+                     "2^31 run writes 32 GiB each time. Resuming then re-searches the "
+                     "current depth from an empty table, which is the right trade for "
+                     "tests and short runs.")
 ap.add_argument("--tt-growth", choices=("jump", "step"), default="jump",
                 help="with >1 worker, whether the first growth goes straight to --tt "
                      "(jump, default) or sizes to the projection (step). See maybe_grow_tt.")
@@ -320,8 +326,19 @@ last_save_ok = True
 
 
 def save_state():
+    """Record the proven depths, and dump the table unless asked not to.
+
+    The dump is the same size as the TABLE, not the search: a 2^31 run writes
+    32 GiB per completed depth. That is worth it for a multi-hour hunt, where
+    re-searching a depth costs more than the write. It is never worth it for a
+    test -- and the slow tests deliberately drive absurd --tt values, so one of
+    them wrote a 256 GiB dump to a pytest tmpdir before this existed.
+    """
     global last_save_ok
     state_path.write_text(json.dumps(state, indent=2))
+    if args.no_tt_dump:
+        last_save_ok = False
+        return
     rc = E.lib.th_tt_save(str(tt_path).encode())
     last_save_ok = rc == 0
     if not last_save_ok:
@@ -494,6 +511,8 @@ for d in range(start_depth, args.maxdepth + 1, 2):
     state["tt_bits_now"] = tt_bits_now
     save_state()
     print("          " + ("checkpointed" if last_save_ok
+                          else "depth recorded, table dump skipped (--no-tt-dump)"
+                          if args.no_tt_dump
                           else "WARNING: progress recorded, no table dump"), flush=True)
 
 advise_on_bound()
