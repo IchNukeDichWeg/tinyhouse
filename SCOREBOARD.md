@@ -2493,3 +2493,54 @@ from waste counts (74% of horizon moves unused -> predicted 4-5%, got 2.06%;
 58% of interior movegen unused -> predicted ~10%, got 2.5%) systematically
 overshoots, because the waste is counted in MOVES and the cost is not
 proportional to moves.
+
+## Post-campaign: pricing the hot operations by duplication
+
+`sample` needs sudo on this machine and gprof is unusable on Darwin, so the
+operations were priced by DUPLICATION instead: build an arm that performs one
+operation twice, XOR the redundant result into a global so it cannot be
+elided, and read the marginal cost off the delta. Node-identical by
+construction -- every arm returned 82,712,965 -- and it measures what removing
+the work would save, which is the question a profile does NOT answer.
+
+Depth 18, one worker, 2^24, nine interleaved repeats, base 11.121s, control
+floor 0.97%:
+
+| one extra call of | cost | count | per call |
+|---|---|---|---|
+| **selection-sort pass** | **10.62%** | ~1.22G comparisons | ~1.1 ns |
+| **`order_score`** | **8.96%** | 661M | ~1.65 ns |
+| make + unmake | 2.67% | 82.7M | ~3.7 ns |
+| `tt_probe` | 2.50% | 42.1M | ~6.6 ns |
+| `attacked` | 2.34% | (not counted separately) | |
+
+Ordering is where the time is, which is why both of this session's wins landed
+there (check masks +8.20%, fused max-scan +8.42%) and why replacing the
+generator with masks measured null twice.
+
+`tt_probe`'s 2.50% is at 2^24, where the table is 256 MB. At the 2^31 the deep
+hunts use, a probe is a genuine DRAM miss and this row is worth much more --
+it is the one number here that does not transfer to the real operating point.
+
+### Where the sort cost actually sits
+
+| interior nodes | share | sort comparisons | per node |
+|---|---|---|---|
+| with a cutoff | 86.2% | 17.2% | 3.0 |
+| **without a cutoff** | **13.8%** | **82.8%** | **90.6** |
+
+The 13.8% of nodes that never cut off pay 83% of all sorting, because the
+selection sort is O(n^2) and they run it to completion over ~16.7 moves. A
+proper sort would take 90.6 comparisons to roughly 68 -- about 1.2% overall,
+and NOT node-identical, since the selection sort's swaps do not produce a
+stable order. Not worth a node measurement.
+
+### The lead that died in one check
+
+`order_score` at ~5.8 cycles looked like it might be paying for thread-local
+access: it touches `killers[ply][0]`, `killers[ply][1]`, `history[stm]` and
+`tl_jitter`, four `_Thread_local` objects, 661M times. On Darwin ARM64 a
+thread-local in a dylib can go through a TLV descriptor CALL. Disassembling the
+shipped build shows zero `tlv_get_addr` sites and `order_score` fully inlined,
+so the compiler had already resolved and hoisted them. Nothing to win; recorded
+so it is not re-derived.
