@@ -27,7 +27,7 @@ static uint8_t ORTH[16][5], DIAG[16][5], KINGN[16][9];
 static uint8_t MAO_MOVES[16][9][2], MAO_ATT[16][9][2]; /* (blocker,dest) / (origin,blocker) */
 static uint8_t PCAPS[2][16][3];
 
-/* TH-45: order_score asks "does this move give direct check" for EVERY move of
+/* TH-48: order_score asks "does this move give direct check" for EVERY move of
  * EVERY interior node -- about 528 million calls in a depth-18 hunt -- and
  * answered it by walking a neighbour list of the destination square looking for
  * the king. The question inverts: for a FIXED enemy king square, the set of
@@ -295,7 +295,7 @@ static int check_block_square(const THPos *p, int ks, int *sq) {
 #define HORIZON_LAZY_GEN 1
 #define HORIZON_GEN_LIMIT 4
 
-/* TH-46: `limit` stops generation once at least that many moves exist, at a
+/* TH-49: `limit` stops generation once at least that many moves exist, at a
  * square boundary, and 0 means generate everything. It exists for
  * horizon_has_move, which asks only "is there a legal move" and measured
  * 158.8M moves generated against 41.5M ever tried -- 74% built and never
