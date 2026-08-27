@@ -523,14 +523,117 @@ static uint64_t key_after(const THPos *p, uint16_t m, uint64_t key) {
     return key;
 }
 
-/* TT entry: data packs value(16) | move(16) | depth(8) | flag(4) | sound(4);
+/* TT entry: data packs value(16) | move(16) | depth(8) | flag(4) | sound(4)
+ * | gen(8) at bit 48 when TT_AGING;
  * xkey = key ^ data. calloc zero-fill never validates against a real key. */
 typedef struct { _Atomic uint64_t xkey; _Atomic uint64_t data; } TTEntry;
 enum { TT_EMPTY, TT_EXACT, TT_LOWER, TT_UPPER };
 #define SND_LB 1
 #define SND_UB 2
+/* TH-40: associativity. The table was direct-mapped and tt_store overwrote
+ * unconditionally, so a shallow node landing on an occupied slot destroyed
+ * whatever was there - including a depth-20 entry that cost minutes. The
+ * depth-20 sweep showed why that matters: node count falls 5.3x (13.79G at
+ * 2^22 to 2.62G at 2^30) on table size alone, so this search is dominated by
+ * transposition hit rate rather than per-node cost, and hit rate per byte is
+ * the lever.
+ *
+ * Four 16-byte entries are exactly one 64-byte cache line, so a 4-way bucket
+ * costs the SAME single DRAM miss per probe as the direct-mapped version and
+ * buys associativity for free. Requires the base to be 64-byte aligned to hold
+ * that property; every size actually used is >= 2^20 entries = 16 MiB, which
+ * malloc serves from mmap page-aligned. th_tt_bucket_aligned() exposes the
+ * check rather than assuming it.
+ *
+ * CONFIRMED. Measured on solve_hunt to depth 18, one worker, table pinned at
+ * 2^20, two interleaved repeats reproducing to the byte: 74,450,920 nodes /
+ * 10.7s bucketed against 91,759,732 / 12.6s direct-mapped, so 18.9% fewer
+ * nodes and 15.1% less time; per-2-ply growth also fell from x9.9 to x7.8. At
+ * sixteen workers, depth 20, 2^26 (98.9% full), interleaved with a same-build
+ * control arm: +22.8% against the slower control and +13.0% against the
+ * faster, over a 6.8% control-arm noise floor.
+ *
+ * NPS moves the WRONG WAY here - 6.96 Mnps bucketed against 7.28 direct - and
+ * that is the point: this search is transposition-bound, so the win is fewer
+ * nodes, and throughput per node drops slightly because a bucket scan reads
+ * four slots. Judge it on time.
+ *
+ * A single-depth cold-table A/B measured -5.08% for this change. That harness
+ * never lets a table accumulate across iterations, which is where bucketing
+ * pays; it is the wrong instrument for a replacement policy.
+ *   0  direct-mapped, always-replace (the pre-change node-identity pin)
+ *   1  4-way bucket, proven-then-deeper replacement (shipped)
+ * At TT_WAYS == 1 every path below collapses to the old code exactly: the
+ * bucket mask becomes a no-op and the victim loop always picks slot 0. */
+#define TT_BUCKETS 1
+#if TT_BUCKETS
+#define TT_WAYS 4
+#else
+#define TT_WAYS 1
+#endif
+#define TT_BUCKET(ix) ((ix) & ~(uint64_t)(TT_WAYS - 1))
+
+/* TH-41: aging. REJECTED, kept at 0 with its number attached.
+ *
+ * The idea: once a bucket is full, evict what the search no longer needs
+ * rather than what happens to be shallowest.
+ *
+ * "Delete what is unreachable" has no cheap sound test in this game: material
+ * is conserved (captures go to hand, drops return them), so the chess trick of
+ * discarding anything with more material than the root has no analogue, and
+ * within one hunt every stored position shares the root's material signature.
+ * Age is the standard proxy and needs no reachability proof.
+ *
+ * The penalty is SCALED AGAINST DEPTH, not absolute. An absolute
+ * newer-beats-older rule would evict a resumed table's depth-22 entries in
+ * favour of fresh depth-2 ones, which is exactly backwards for --state resume.
+ * One generation of staleness costs 8 depth-points, so a depth-22 entry
+ * outlives three iterations before a shallow fresh entry outranks it.
+ *
+ * Free in space: data packs 48 bits, so the generation lives in bits 48-55 of
+ * an entry that was already 16 bytes. No extra cache line, no extra DRAM miss.
+ * Measured on the iterative-deepening instrument (solve_hunt to depth 18, one
+ * worker, table pinned at 2^20 so it saturates, two interleaved repeats
+ * reproducing to the byte): 83,494,481 nodes / 11.6s with aging against
+ * 74,450,920 / 10.7s without, i.e. 12% WORSE. The reason is specific to a
+ * solver doing iterative deepening: the previous iteration's entries are the
+ * most valuable ones in the table - depth 16's results are what make depth 18
+ * cheap - so a staleness penalty discards exactly what the next iteration
+ * wants. Nothing here is stale yet. Worth revisiting only for a workload that
+ * searches many unrelated roots through one table, e.g. the GUI server.
+ *
+ * A first attempt measured this as an exact tie, because bench_ab.py runs ONE
+ * search per repeat on a fresh table: root_search bumps the generation once,
+ * every entry carries it, and the penalty never fires. Wrong instrument, not a
+ * null result.
+ *   0  no aging (shipped)
+ *   1  8-points-per-generation staleness penalty (rejected, see above) */
+#define TT_AGING 0
+#define TT_AGE_PENALTY 8
+#define TT_AGE_CAP 31
+static _Atomic uint8_t tt_gen = 0;
+void th_tt_new_generation(void) {
+    atomic_fetch_add_explicit(&tt_gen, 1, memory_order_relaxed);
+}
+
 static TTEntry *tt = 0;
 static uint64_t tt_mask = 0;
+
+/* Replacement taste, shared by tt_store and th_tt_grow so they cannot drift
+ * apart: a proven exact entry outranks everything, then deeper outranks
+ * shallower. Higher = worth keeping. */
+static inline int tt_rank(uint64_t d) {
+    int proven = ((d >> 44 & 0xf) == (SND_LB | SND_UB)) && ((d >> 40 & 0xf) == TT_EXACT);
+#if TT_AGING
+    /* uint8 subtraction wraps, so this stays correct across generation 255->0 */
+    int age = (uint8_t)(atomic_load_explicit(&tt_gen, memory_order_relaxed) - (uint8_t)(d >> 48));
+    if (age > TT_AGE_CAP) age = TT_AGE_CAP;
+    /* +256 keeps the result positive: depth 0-255 less at most 248 */
+    return (proven << 17) | ((int)(uint8_t)(d >> 32) + 256 - TT_AGE_PENALTY * age);
+#else
+    return (proven << 8) | (int)(uint8_t)(d >> 32);
+#endif
+}
 static _Thread_local uint64_t path[MAXPLY];
 static _Thread_local int16_t history[2][2048];
 static _Thread_local uint16_t killers[MAXPLY][2];
@@ -574,6 +677,12 @@ int th_tt_init(int log2_entries) {
     return tt ? 0 : -1;
 }
 
+/* TH-40: is the base 64-byte aligned, so a 4-way bucket lands in ONE cache
+ * line? Exposed rather than asserted because the whole point of bucketing is
+ * that it costs no extra DRAM miss, and that claim is false if buckets
+ * straddle lines. A test pins it at every size the project uses. */
+int th_tt_bucket_aligned(void) { return tt && ((uintptr_t)tt & 63) == 0; }
+
 /* Occupancy of the table, for sizing decisions (TH-39). Counting is O(entries)
  * and only meaningful between searches, so it is a tool call and nothing in the
  * search reads it. */
@@ -606,14 +715,17 @@ int th_tt_grow(int log2_entries) {
         if (!d) continue;
         uint64_t x = atomic_load_explicit(&tt[i].xkey, memory_order_relaxed);
         uint64_t key = x ^ d;
-        TTEntry *e = &nt[key & nmask];
-        uint64_t ed = atomic_load_explicit(&e->data, memory_order_relaxed);
-        if (ed) {
-            int op = ((ed >> 44 & 0xf) == (SND_LB | SND_UB)) && ((ed >> 40 & 0xf) == TT_EXACT);
-            int np = ((d >> 44 & 0xf) == (SND_LB | SND_UB)) && ((d >> 40 & 0xf) == TT_EXACT);
-            if (op && !np) continue;
-            if (op == np && (uint8_t)(ed >> 32) >= (uint8_t)(d >> 32)) continue;
+        TTEntry *b = &nt[TT_BUCKET(key & nmask)];
+        int victim = 0, worst = 1 << 30;
+        for (int j = 0; j < TT_WAYS; j++) {
+            uint64_t bd = atomic_load_explicit(&b[j].data, memory_order_relaxed);
+            if (!bd) { victim = j; break; }
+            int r = tt_rank(bd);
+            if (r < worst) { worst = r; victim = j; }
         }
+        TTEntry *e = &b[victim];
+        uint64_t ed = atomic_load_explicit(&e->data, memory_order_relaxed);
+        if (ed && tt_rank(ed) >= tt_rank(d)) continue;   /* keep the more valuable */
         atomic_store_explicit(&e->data, d, memory_order_relaxed);
         atomic_store_explicit(&e->xkey, key ^ d, memory_order_relaxed);
     }
@@ -640,24 +752,40 @@ typedef struct { int16_t value; uint16_t move; uint8_t depth, flag, sound; } TTV
 
 static int tt_probe(uint64_t key, TTView *out) {
     if (!tt) return 0;
-    TTEntry *e = &tt[key & tt_mask];
-    uint64_t d = atomic_load_explicit(&e->data, memory_order_relaxed);
-    uint64_t x = atomic_load_explicit(&e->xkey, memory_order_relaxed);
-    if ((x ^ d) != key || !d) return 0;
-    out->value = (int16_t)(d & 0xffff);
-    out->move = (uint16_t)(d >> 16 & 0xffff);
-    out->depth = (uint8_t)(d >> 32 & 0xff);
-    out->flag = (uint8_t)(d >> 40 & 0xf);
-    out->sound = (uint8_t)(d >> 44 & 0xf);
-    return 1;
+    TTEntry *b = &tt[TT_BUCKET(key & tt_mask)];
+    for (int i = 0; i < TT_WAYS; i++) {
+        uint64_t d = atomic_load_explicit(&b[i].data, memory_order_relaxed);
+        uint64_t x = atomic_load_explicit(&b[i].xkey, memory_order_relaxed);
+        if ((x ^ d) != key || !d) continue;
+        out->value = (int16_t)(d & 0xffff);
+        out->move = (uint16_t)(d >> 16 & 0xffff);
+        out->depth = (uint8_t)(d >> 32 & 0xff);
+        out->flag = (uint8_t)(d >> 40 & 0xf);
+        out->sound = (uint8_t)(d >> 44 & 0xf);
+        return 1;
+    }
+    return 0;
 }
 
 static void tt_store(uint64_t key, int16_t value, uint16_t move, uint8_t depth, uint8_t flag, uint8_t sound) {
-    TTEntry *e = &tt[key & tt_mask];
     uint64_t d = (uint64_t)(uint16_t)value | (uint64_t)move << 16 | (uint64_t)depth << 32
-               | (uint64_t)flag << 40 | (uint64_t)sound << 44;
-    atomic_store_explicit(&e->data, d, memory_order_relaxed);
-    atomic_store_explicit(&e->xkey, key ^ d, memory_order_relaxed);
+               | (uint64_t)flag << 40 | (uint64_t)sound << 44
+#if TT_AGING
+               | (uint64_t)atomic_load_explicit(&tt_gen, memory_order_relaxed) << 48
+#endif
+               ;
+    TTEntry *b = &tt[TT_BUCKET(key & tt_mask)];
+    int victim = 0, worst = 1 << 30;
+    for (int i = 0; i < TT_WAYS; i++) {
+        uint64_t ed = atomic_load_explicit(&b[i].data, memory_order_relaxed);
+        if (!ed) { victim = i; break; }                 /* empty slot wins */
+        uint64_t ex = atomic_load_explicit(&b[i].xkey, memory_order_relaxed);
+        if ((ex ^ ed) == key) { victim = i; break; }    /* this position: refresh in place */
+        int r = tt_rank(ed);
+        if (r < worst) { worst = r; victim = i; }
+    }
+    atomic_store_explicit(&b[victim].data, d, memory_order_relaxed);
+    atomic_store_explicit(&b[victim].xkey, key ^ d, memory_order_relaxed);
 }
 
 /* THB-01: a TT cutoff must never hand back a mate score whose distance
@@ -1025,6 +1153,7 @@ static void *helper_main(void *v) {
  * perspective; *snd gets the soundness flags of the MAIN thread's result. */
 static int root_search(THPos *p, int depth, int alpha, int beta, int workers,
                        uint16_t *bestmove, int *snd) {
+    th_tt_new_generation();   /* every public entry point funnels through here */
     memset(killers, 0, sizeof killers);
 #if CLEAR_HISTORY_AT_ROOT
     memset(history, 0, sizeof history);

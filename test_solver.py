@@ -407,6 +407,9 @@ def test_every_cffi_symbol_has_a_contract_check(tt):
     assert E.lib.th_tt_fill() == 0                      # a fresh table is empty
     E.lib.th_solve(E.to_c(start), 6, bm, snd)
     assert 0 < E.lib.th_tt_fill() <= (1 << 18); cover("th_tt_fill")
+    # TH-40: the 4-way bucket only costs one DRAM miss if it sits in ONE cache
+    # line, which needs a 64-byte aligned base. Pinned here rather than assumed.
+    assert E.lib.th_tt_bucket_aligned() == 1; cover("th_tt_bucket_aligned")
     E.lib.th_clear_history(); cover("th_clear_history")
     n0 = E.lib.th_nodes()
     E.lib.th_solve(E.to_c(start), 4, bm, snd)

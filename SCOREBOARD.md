@@ -2045,3 +2045,53 @@ being a lever that can be pulled much further on this machine.
 directional structure and could have pruned a subtree holding a real mate, so
 the depth-24 claim carries the same unquantified residual as every other bound
 here until it is re-run under `--seed 0xC0FFEE`.
+
+## Post-campaign: TT replacement policy — bucketing CONFIRMED, aging REJECTED
+
+Prompted by a per-core throughput comparison against Pygin (a Python+C chess
+engine, 4.19 Mnps single-thread pre-NNUE, ~68 Mnps at 16 threads). Tinyhouse
+was at 3.74 Mnps/core on the saturated depth-24 run. The depth-20 tt sweep at
+16 workers showed where the time really goes:
+
+| table | 2^22 | 2^24 | 2^26 | 2^28 | 2^30 |
+|---|---|---|---|---|---|
+| nodes | 13.79G | 7.13G | 3.17G | 2.79G | 2.62G |
+| time | 179.5s | 105.9s | 48.9s | **44.9s** | 46.2s |
+| nps | **76.8M** | 67.4M | 64.9M | 62.2M | 56.6M |
+
+Node count falls 5.3x on table size alone, so this search is transposition-
+bound rather than per-node-cost-bound. **The nps column is the cautionary
+one**: 2^22 posts the highest throughput in the table, beating Pygin's 68M,
+and takes four times as long. NPS is a gameable metric here and every verdict
+below is taken on time.
+
+**TT_BUCKETS (CONFIRMED, shipped at 1).** Four 16-byte entries per 64-byte
+cache line: same one DRAM miss per probe, but 4-way associativity and
+proven-then-deeper replacement instead of blind overwrite. solve_hunt to
+depth 18, one worker, table pinned at 2^20, two interleaved repeats
+reproducing to the byte: 74,450,920 nodes / 10.7s against 91,759,732 / 12.6s.
+**18.9% fewer nodes, 15.1% less time**, and per-2-ply growth fell x9.9 -> x7.8.
+At 16 workers, depth 20, 2^26 (98.9% full), interleaved with a same-build
+control arm: +22.8% against the slower control, +13.0% against the faster,
+over a 6.8% control-arm noise floor. NPS went the WRONG way (6.96M against
+7.28M), which is the expected shape for a change that wins by searching less.
+
+**TT_AGING (REJECTED, kept at 0).** Generation stamp in the 16 spare bits of
+the existing entry, staleness penalised at 8 depth-points per generation.
+Same instrument: 83,494,481 nodes / 11.6s against 74,450,920 / 10.7s, **12%
+worse**. In an iteratively-deepened solve the previous iteration's entries are
+the most valuable ones in the table, so a staleness penalty discards exactly
+what the next iteration wants. The motivating idea -- evict what is no longer
+reachable -- has no cheap sound test in this game at all: material is
+conserved, so the chess filter "discard anything with more material than the
+root" has no analogue, and inside one hunt every stored position shares the
+root's material signature.
+
+**A harness error worth recording.** Both changes were first measured with
+bench_ab.py, which runs ONE search per repeat on a fresh table. That reported
+bucketing at -5.08% and aging at an exact tie. Both were artifacts: a
+replacement policy only shows itself once a table accumulates across
+iterations, and root_search bumps the generation once per call so aging never
+fired at all. The verdicts above are from solve_hunt, which deepens
+iteratively over one table. bench_ab.py remains right for node-identical
+per-node changes and wrong for anything about the table's contents.
