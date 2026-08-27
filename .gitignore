@@ -7,3 +7,4 @@ analysis.sqlite
 solve_state/
 .claude/scheduled_tasks.lock
 libtinyhouse.buildid
+.DS_Store
