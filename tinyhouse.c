@@ -26,6 +26,22 @@ enum { P, F, U, W, K };
 static uint8_t ORTH[16][5], DIAG[16][5], KINGN[16][9];
 static uint8_t MAO_MOVES[16][9][2], MAO_ATT[16][9][2]; /* (blocker,dest) / (origin,blocker) */
 static uint8_t PCAPS[2][16][3];
+
+/* TH-45: order_score asks "does this move give direct check" for EVERY move of
+ * EVERY interior node -- about 528 million calls in a depth-18 hunt -- and
+ * answered it by walking a neighbour list of the destination square looking for
+ * the king. The question inverts: for a FIXED enemy king square, the set of
+ * squares a given piece type checks from is a constant, so it can be a 16-bit
+ * mask indexed by (type, king square) and the test becomes one shift.
+ *
+ * Derived from the same neighbour tables the loops walked, so correctness
+ * follows by construction rather than by a second hand-written movegen.
+ * The mao is the one case needing more than a bit: it checks only when its leg
+ * is empty, and the leg for (from -> ks) is unique because the orthogonal step
+ * is determined by the destination. CHK_MAO_LEG carries it. */
+static uint16_t CHK_FROM[5][16];      /* [type][enemy king sq] -> mask of FROM squares */
+static uint16_t CHK_PAWN[2][16];      /* pawns attack by colour */
+static uint8_t  CHK_MAO_LEG[16][16];  /* [enemy king sq][from] -> leg that must be empty */
 static const int PUSH[2] = {4, -4};
 static const int PROMO_RANK[2] = {3, 0};
 static int tables_ready = 0;
@@ -77,6 +93,21 @@ static void init_tables(void) {
             }
         }
     }
+    for (int ks = 0; ks < 16; ks++)
+        for (int from = 0; from < 16; from++) {
+            for (const uint8_t *n = DIAG[from]; *n != 0xff; n++)
+                if (*n == ks) CHK_FROM[F][ks] |= (uint16_t)(1u << from);
+            for (const uint8_t *n = ORTH[from]; *n != 0xff; n++)
+                if (*n == ks) CHK_FROM[W][ks] |= (uint16_t)(1u << from);
+            for (int c = 0; c < 2; c++)
+                for (const uint8_t *n = PCAPS[c][from]; *n != 0xff; n++)
+                    if (*n == ks) CHK_PAWN[c][ks] |= (uint16_t)(1u << from);
+            for (int i = 0; MAO_MOVES[from][i][0] != 0xff; i++)
+                if (MAO_MOVES[from][i][1] == ks) {
+                    CHK_FROM[U][ks] |= (uint16_t)(1u << from);
+                    CHK_MAO_LEG[ks][from] = MAO_MOVES[from][i][0];
+                }
+        }
     tables_ready = 1;
 }
 
@@ -886,9 +917,22 @@ typedef struct { int rep_min; uint8_t snd; uint16_t best; } SInfo;
 
 /* cheap direct-check detection for ordering only (ignores discovered and
  * unblocking effects; ordering need not be exact) */
+/*   0  walk the destination's neighbour list (the node-identity pin)
+ *   1  mask lookup, same answers (shipped) */
+#define CHECK_MASKS 1
+
 static int gives_direct_check(const THPos *p, uint16_t m, int ks) {
     int to = M_TO(m), us = p->stm;
     int t = M_IS_DROP(m) ? M_FROM(m) : M_PROMO(m) ? M_PROMO(m) : TYPE(p->board[M_FROM(m)]);
+#if CHECK_MASKS
+    switch (t) {
+    case P: return (CHK_PAWN[us][ks] >> to) & 1;
+    case F: return (CHK_FROM[F][ks] >> to) & 1;
+    case W: return (CHK_FROM[W][ks] >> to) & 1;
+    case U: return ((CHK_FROM[U][ks] >> to) & 1) && !p->board[CHK_MAO_LEG[ks][to]];
+    }
+    return 0;
+#else
     const uint8_t *nb;
     switch (t) {
     case P: for (nb = PCAPS[us][to]; *nb != 0xff; nb++) if (*nb == ks) return 1; return 0;
@@ -900,6 +944,7 @@ static int gives_direct_check(const THPos *p, uint16_t m, int ks) {
         return 0;
     }
     return 0;
+#endif
 }
 
 static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks) {

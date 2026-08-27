@@ -2272,3 +2272,39 @@ because this game has no irreversible moves: chess scans back only to the last
 capture or pawn move, and here there is no such point. A presence filter over
 the path would skip most of those compares, but the ceiling is 1-2%, at or
 under the noise floor these campaigns measure at. Left alone deliberately.
+
+## Post-campaign: check detection by mask instead of list walk — CONFIRMED
+
+`order_score` asks "does this move give direct check" for EVERY move of EVERY
+interior node -- about 528 million calls in a depth-18 hunt -- and answered it
+by walking the destination square's neighbour list looking for the king.
+
+The question inverts. For a FIXED enemy king square the set of squares a given
+piece type checks from is a constant, so it is a 16-bit mask indexed by (type,
+king square) and the test becomes one shift. The mao is the only case needing
+more than a bit, because it checks only when its leg is empty, and the leg for
+(from -> ks) is unique since the orthogonal step is determined by the
+destination.
+
+The masks are DERIVED from the same neighbour tables the loops walked, in
+init_tables, so correctness follows by construction rather than from a second
+hand-written movegen -- the failure mode that produced the double-mao-check bug
+earlier in this project.
+
+Node-identical, so `bench_ab.py` is the right instrument and nps is an honest
+metric for once. Depth 18, one worker, 2^24, five interleaved repeats, with a
+same-build control arm:
+
+| arm | nodes | cpu | vs baseline |
+|---|---|---|---|
+| control A | 82,712,965 | 14.483s | baseline |
+| control B | 82,712,965 | 14.459s | +0.17% (noise floor) |
+| **masks** | 82,712,965 | **13.385s** | **+8.20%** |
+
+**+8.20% against a 0.17% noise floor**, 48x the floor, node identity confirmed
+across all three arms. NPS 5.71M -> 6.18M.
+
+Found by re-profiling after the horizon change: `search` self-time stayed at
+51% while pseudo_moves sat at 25.6% and attacked at 15.3%, and the profile
+could not see gives_direct_check because order_score is inlined. The call
+COUNT, not the profile, is what identified it.
