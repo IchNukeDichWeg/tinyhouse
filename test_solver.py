@@ -905,7 +905,7 @@ def test_solve_hunt_grows_and_resumes_across_the_growth(tmp_path):
         return r.stdout
 
     first = hunt(14)
-    assert "grew to 2^" in first
+    assert "GREW to 2^" in first
     saved = json.loads(state.read_text())
     assert saved["tt_bits_now"] > 14
     assert saved["tt_bits_now"] <= 20
@@ -971,9 +971,9 @@ def test_tt_growth_steps_down_when_the_target_will_not_fit(tmp_path):
         capture_output=True, text=True, timeout=600)
     assert out.returncode == 0, out.stderr
     assert "instead" in out.stdout, out.stdout          # stepped down rather than refusing
-    assert "grew to 2^" in out.stdout, out.stdout       # and actually grew
-    grew = [l for l in out.stdout.splitlines() if "grew to 2^" in l]
-    got = int(grew[0].split("grew to 2^")[1].split()[0])
+    assert "GREW to 2^" in out.stdout, out.stdout       # and actually grew
+    grew = [l for l in out.stdout.splitlines() if "GREW to 2^" in l]
+    got = int(grew[0].split("GREW to 2^")[1].split()[0])
     assert got > 20, f"stayed at or near the start size: {grew[0]}"
 
 
@@ -1009,10 +1009,10 @@ def test_resume_resizes_the_table_before_the_next_depth(tmp_path):
         capture_output=True, text=True, timeout=1800)
     assert out.returncode == 0, out.stderr
     assert "resumed from" in out.stdout
-    grew = [l for l in out.stdout.splitlines() if "grew to 2^" in l]
+    grew = [l for l in out.stdout.splitlines() if "GREW to 2^" in l]
     assert grew, f"resume did not resize a saturated table:\n{out.stdout}"
     # and it happened before any depth-22 work, not after the depth finished
-    body = out.stdout.split("grew to 2^")[0]
+    body = out.stdout.split("GREW to 2^")[0]
     assert "d22" not in body and "depth 22" not in body, \
         f"table grew only AFTER depth 22 ran:\n{out.stdout}"
     assert json.loads(state.read_text())["tt_bits_now"] > 20

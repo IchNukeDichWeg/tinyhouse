@@ -65,6 +65,12 @@ import tinyhouse as T
 # multi-GiB allocation.
 TT_GROW_AT = 0.80
 
+
+def gib(b):
+    """Sizes span 16 MiB to 32 GiB, so a fixed GiB format prints "0.0 GiB" for
+    a table that is very much not zero."""
+    return f"{b / 2**30:.2f} GiB" if b >= 2**30 else f"{b / 2**20:.0f} MiB"
+
 ap = argparse.ArgumentParser()
 ap.add_argument("color", type=int, choices=(0, 1), help="0 = White win hunt, 1 = Black")
 # Default 1, not 2 (TH-05). Lazy SMP is NONDETERMINISTIC by construction --
@@ -149,7 +155,7 @@ if E.lib.th_tt_init(tt_bits_now) != 0:
              f"({(1 << tt_bits_now) * 16 // 2**20} MiB). Use a smaller --tt-start.")
 
 
-def maybe_grow_tt(growth):
+def maybe_grow_tt(growth, next_depth):
     """Between depths only: the helpers are joined, so the rehash is safe.
 
     Sizes for the NEXT depth, not the one that just finished: entries grow by
@@ -161,7 +167,7 @@ def maybe_grow_tt(growth):
     global tt_bits_now
     fill = E.lib.th_tt_fill()
     occ = fill / (1 << tt_bits_now)
-    line = f"  tt 2^{tt_bits_now}: {fill:,} entries, {occ:.0%} full"
+    line = f"          tt 2^{tt_bits_now} | {fill:,} entries | {occ:.0%} full"
     projected = fill * growth
     want_bits = tt_bits_now
     while want_bits < args.tt and projected > 0.5 * (1 << want_bits):
@@ -196,16 +202,27 @@ def maybe_grow_tt(growth):
         capped = new_bits
         while free and (1 << new_bits) * 16 > free * 0.9 and new_bits > tt_bits_now:
             new_bits -= 1
+        # th_tt_grow holds BOTH tables live across the rehash, so the figure
+        # that matters is a NEW allocation of the target size ON TOP of the
+        # current one, not the difference between them. Reporting "needs 32.0
+        # GiB" while 16.0 GiB is already held reads as a total and invites the
+        # reasonable objection that only 16 more are wanted. Peak is spelled out.
+        held = (1 << tt_bits_now) * 16
+        tgt = (1 << capped) * 16
+        cost = (f"a new {gib(tgt)} block alongside the live {gib(held)} "
+                f"({gib(tgt + held)} peak)")
         if new_bits <= tt_bits_now:
-            print(line + f" -- growth to 2^{capped} needs "
-                  f"{(1 << capped) * 16 / 2**30:.1f} GiB, only ~{free / 2**30:.1f} GiB free, "
-                  f"and no smaller size beats the current 2^{tt_bits_now}; staying put",
-                  flush=True)
+            print(line + f" | 2^{capped} needs {cost}, only ~{gib(free)} free,"
+                  f" and no smaller size beats 2^{tt_bits_now}; STAYING PUT."
+                  f" Growing early avoids this: --tt-start {capped} allocates it once,"
+                  f" up front, while the table is still empty.", flush=True)
             return
+        # Not printed here: the grow line below reports the size actually taken,
+        # and two GREW claims for one growth read as two growths.
+        capped_note = ""
         if new_bits < capped:
-            print(line + f" -- 2^{capped} needs {(1 << capped) * 16 / 2**30:.1f} GiB "
-                  f"but only ~{free / 2**30:.1f} GiB is free; growing to 2^{new_bits} "
-                  f"({(1 << new_bits) * 16 / 2**30:.2f} GiB) instead", flush=True)
+            capped_note = (f" | 2^{capped} wanted {cost}, only ~{gib(free)} free,"
+                           f" so this may strand the run below 2^{capped}")
         want = (1 << new_bits) * 16
         t0 = time.perf_counter()
         if E.lib.th_tt_grow(new_bits) != 0:
@@ -213,12 +230,13 @@ def maybe_grow_tt(growth):
                   f"staying at 2^{tt_bits_now}", flush=True)
             return
         kept = E.lib.th_tt_fill()
-        print(line + f", projecting ~{int(projected):,} next depth "
-              f"-> grew to 2^{new_bits} ({(1 << new_bits) * 16 / 2**30:.2f} GiB), "
-              f"{kept:,} entries carried over, {time.perf_counter() - t0:.1f}s", flush=True)
+        print(line + f" | GREW to 2^{new_bits} ({gib((1 << new_bits) * 16)})"
+              f" for depth {next_depth} | {kept:,} entries carried over in "
+              f"{time.perf_counter() - t0:.1f}s" + capped_note, flush=True)
         tt_bits_now = new_bits
     else:
-        print(line + (f" (cap 2^{args.tt})" if tt_bits_now < args.tt else " (at cap)"), flush=True)
+        print(line + (f" | cap 2^{args.tt}" if tt_bits_now < args.tt else " | at cap")
+              + f" | sized for depth {next_depth}", flush=True)
 
 # Everything that changes what a completed depth MEANS. `build` is the engine
 # fingerprint: "no forced win through depth 20" is a claim about the code that
@@ -346,7 +364,7 @@ def fmt(n):
 # Sizing here also covers the case the growth policy was never asked about: a
 # machine that has since freed memory, or a --tt raised between runs.
 if state["depths"]:
-    maybe_grow_tt(growth)
+    maybe_grow_tt(growth, state["proven_no_win_through"] + 2)
     state["tt_bits_now"] = tt_bits_now
 
 start_depth = max(6, state["proven_no_win_through"] + 2)
@@ -365,12 +383,12 @@ def progress_line(d, n, nps, dt, est):
     mid-depth breaks it badly, which is precisely when the run is slowest and
     the ETA matters most.
     """
-    line = f"  d{d}  {fmt(n)} nodes  {fmt(nps)}nps  {dt:6.0f}s"
+    line = f"depth {d:2d}  RUNNING  {fmt(n)} nodes | {fmt(nps)}nps | {dt:.0f}s"
     if not est:
         return line
     if n < est:
-        return line + f"  ~{n/est*100:2.0f}% of est {fmt(est)}  eta ~{(est-n)/max(nps,1)/60:.0f}m"
-    return line + f"  PAST est {fmt(est)} by {n/est:.1f}x  eta unknown"
+        return line + f" | ~{n/est*100:.0f}% of est {fmt(est)} | eta ~{(est-n)/max(nps,1)/60:.0f}m"
+    return line + f" | PAST est {fmt(est)} by {n/est:.1f}x | eta unknown"
 
 
 for d in range(start_depth, args.maxdepth + 1, 2):
@@ -401,9 +419,18 @@ for d in range(start_depth, args.maxdepth + 1, 2):
     prev_nodes = n
     v = result["v"]
     if tty:
-        print("\r" + " " * 110, end="\r")
-    print(f"depth {d:2d}  value {v:6d}  best {T.move_str(bm[0]) if bm[0] else '-':6s}"
-          f"  nodes {n:>15,}  {dt:8.1f}s  {fmt(n/max(dt,1e-9))}nps  growth x{growth:.1f}", flush=True)
+        print("\r" + " " * 118, end="\r")
+    # The old layout printed stats, then the table line, then the verdict, so a
+    # depth's ANSWER landed two lines below its heading with unrelated sizing
+    # output in between; and a finished depth read "depth 22" while the running
+    # one read "d24", which made them hard to tell apart while scrolling. Now
+    # the verdict is on the heading, both states share the "depth NN" prefix,
+    # and DONE/RUNNING says which.
+    verdict = (f"{name} FORCES A WIN in {30000 - v} plies" if v > 29000
+               else f"no forced {name} win within {d} plies")
+    print(f"depth {d:2d}  DONE     {verdict}", flush=True)
+    print(f"          {n:,} nodes | {dt:.1f}s | {fmt(n/max(dt,1e-9))}nps"
+          f" | growth x{growth:.1f} | best {T.move_str(bm[0]) if bm[0] else '-'}", flush=True)
     state["depths"].append({"depth": d, "value": v, "nodes": n, "seconds": round(dt, 1)})
     if v > 29000:
         # TH-34: the one self-consistency check the discarded flags made
@@ -417,14 +444,14 @@ for d in range(start_depth, args.maxdepth + 1, 2):
                      f"That contradicts the search's own invariants; do not trust this run.")
         state["result"] = {"proven": f"{name} forces a win", "plies": 30000 - v, "depth": d}
         save_state()
-        print(f"PROVEN: {name} forces a win in {30000 - v} plies", flush=True)
+        print("          checkpointed", flush=True)
         print(seed_advice(d), flush=True)
         break
     state["proven_no_win_through"] = d
-    maybe_grow_tt(growth)
+    maybe_grow_tt(growth, d + 2)
     state["tt_bits_now"] = tt_bits_now
     save_state()
-    print(f"  => no forced {name} win within {d} plies (proven, "
-          + ("checkpointed)" if last_save_ok else "progress recorded, no table dump)"), flush=True)
+    print("          " + ("checkpointed" if last_save_ok
+                          else "WARNING: progress recorded, no table dump"), flush=True)
 
 advise_on_bound()
