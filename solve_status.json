@@ -4,17 +4,17 @@
   "value": "unknown, consistent with draw",
   "proven_bounds": [
     {
-      "claim": "no forced WHITE win within 24 plies",
-      "depth": 24,
-      "nodes": 29410245520,
-      "nodes_note": "the depth-24 slice; the whole iteratively-deepened run from depth 6 was 37,847,112,002 nodes in 698.5s (11.6 min). Re-proved on the post-bucketing build: the same bound was first taken at 119,073,867,480 nodes / 1990.2s under the direct-mapped table, so the claim now rests on two independent builds with node counts differing 4x.",
-      "seconds": 548.5,
+      "claim": "no forced WHITE win within 26 plies",
+      "depth": 26,
+      "nodes": 105022380063,
+      "seconds": 1747.6,
+      "nodes_note": "the depth-26 slice; the whole iteratively-deepened run from depth 6 was 137,949,700,606 nodes in 2273.3s (37.9 min). For scale, the same command reached only depth 24 on the pre-bucketing engine, in 35.9 minutes.",
       "method": "null-window mate hunt, iterative deepening in one process from depth 6 in steps of 2",
       "workers": 16,
-      "tt": "cap 2^30 (16 GiB), grown from 2^20; reached 100% occupancy at depth 24",
-      "build": 4903809728580668918,
+      "tt": "cap 2^31 (32 GiB), grown from 2^20; 92% occupancy after depth 24, 100% after depth 26",
       "machine": "Apple M5 Pro, 18 cores, 64 GiB, macOS (Darwin 25.6.0)",
-      "supersedes": "the earlier depth-20 White bound (728,842,906 nodes) taken on the 10-core M2 Pro under an older build"
+      "supersedes": "the depth-24 bound, itself proved twice: 119,073,867,480 nodes / 1990.2s on the direct-mapped table and 29,410,245,520 / 548.5s once the table was 4-way bucketed. Depth 24 now runs in 397.6s, 5.01x the original.",
+      "build": 17058640857953325544
     },
     {
       "claim": "no forced BLACK win within 22 plies",
@@ -42,8 +42,8 @@
       "value": "White mates in 13 plies"
     }
   ],
-  "summary": "no forced win for either side within 24 (White) / 22 (Black) plies; game value still open",
-  "machine": "The WHITE depth-24 bound was measured on an Apple M5 Pro, 18 cores, 64 GiB, macOS (Darwin 25.6.0). The BLACK depth-22 bound is older and was taken on an Apple M2 Pro, 10 cores, 16 GiB, macOS 15 (Darwin 25.5.0) under an earlier build, so the two node counts are not comparable with each other.",
+  "summary": "no forced win for either side within 26 (White) / 22 (Black) plies; game value still open",
+  "machine": "The WHITE depth-26 bound was measured on an Apple M5 Pro, 18 cores, 64 GiB, macOS (Darwin 25.6.0). The BLACK depth-22 bound is older, taken on an Apple M2 Pro, 10 cores, 16 GiB under an earlier build, so the two node counts are not comparable with each other.",
   "note": "Two claim strengths, not one. A reported mate is a proof of a forced win and, since the TT_BUDGET_GUARD in tinyhouse.c, of the distance it names: the search returns an unsound 0 at the horizon, so a mate score can only come from real terminals. A 'no forced win within N plies' bound is immune to horizon unsoundness, to a TT cutoff overrunning its budget and to store-side graph-history interaction, but not to a 64-bit Zobrist collision, which has no directional structure and could prune a subtree holding a real mate. That residual is unquantified rather than zero; re-run under a second --seed to check it. Deeper bounds: run solve_hunt.py (see README).",
-  "reproducibility": "The node counts above are NOT exactly reproducible and are not claimed to be. solve_hunt.py defaulted to 2 workers when these runs were made and lazy SMP is nondeterministic, so the worker count in force is not reliably recorded; the default is 1 now, which is deterministic. A cold single-depth run also differs from the iteratively-deepened slice recorded here (a re-run measured +3.4%). The CLAIMS do not depend on any of this: a null-window hunt returning 0 proves the negative whatever the thread count. Reproduce with: solve_hunt.py 0 --tt 30 --workers 16 --maxdepth 24  /  solve_hunt.py 1 --tt 27 --maxdepth 22 (the Black line reproduces the OLD bound; it has not been re-run on the current build or machine)."
+  "reproducibility": "The node counts above are NOT exactly reproducible and are not claimed to be. solve_hunt.py defaulted to 2 workers when these runs were made and lazy SMP is nondeterministic, so the worker count in force is not reliably recorded; the default is 1 now, which is deterministic. A cold single-depth run also differs from the iteratively-deepened slice recorded here (a re-run measured +3.4%). The CLAIMS do not depend on any of this: a null-window hunt returning 0 proves the negative whatever the thread count. Reproduce with: solve_hunt.py 0 --tt 31 --workers 16 --maxdepth 26  /  solve_hunt.py 1 --tt 27 --maxdepth 22 (the Black line reproduces the OLD bound; it has not been re-run on the current build or machine, and is now 4 plies behind the White one)."
 }

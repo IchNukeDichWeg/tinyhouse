@@ -2186,3 +2186,49 @@ the same reason TH-38 did: pawn drops are legal on ranks 2 and 3, exactly the
 range a pawn advances through, so a pawn captured on rank 3 can be dropped back
 on rank 2 and the earlier position recurs in full. Crazyhouse conserves
 everything, so there is no monotone axis to age against.
+
+## Post-campaign: the WHITE bound reaches depth 26
+
+No forced White win from `fuwk/3p/P3/KWUF[-] w` within **26 plies**. One run,
+16 workers, `--tt 31` (32 GiB cap grown from 2^20), build
+`17058640857953325544`, Apple M5 Pro 18 cores / 64 GiB. 137,949,700,606 nodes
+over the whole iteratively-deepened run in 2273.3s (37.9 min).
+
+Same command across three engine builds:
+
+| depth | direct, tt30 | bucketed, tt30 | + horizon skip, tt31 |
+|---|---|---|---|
+| 22 | 7,848,706,198 / 133.1s | 6,732,390,460 / 119.6s | 6,759,498,689 / 102.2s |
+| 24 | 119,073,867,480 / 1990.2s | 29,410,245,520 / 548.5s | **24,516,888,146 / 397.6s** |
+| 26 | - | - | **105,022,380,063 / 1747.6s** |
+| whole run | 128.55G / 35.9 min | 37.85G / 11.6 min | 137.95G / 37.9 min |
+
+**Depth 24 is x5.01 faster than the first run, on 4.86x fewer nodes.** The
+whole-run line is the honest headline: the original engine spent 35.9 minutes
+reaching depth 24; the current one reaches depth 26 in 37.9.
+
+**Growth held across the saturation boundary.** d22->d24 x3.6, d24->d26 x4.3,
+with occupancy going 33% -> 92% -> 100%. The direct-mapped run tripled to x15.2
+the moment its table filled. This one saturates at depth 26 and stays near x4,
+which is the strongest evidence yet that x15.2 was replacement thrashing rather
+than tree growth.
+
+**Prediction scored.** Depth 26 was projected here at ~130G nodes and ~40
+minutes, explicitly as a floor rather than a forecast. Actual: 105.0G and 29.1
+minutes. The pre-bucketing extrapolation for the same depth was ~1.8 trillion
+nodes and 8-10 hours, i.e. 17x off.
+
+**Attribution limit, stated rather than implied.** The depth-24 improvement
+from 548.5s to 397.6s mixes TWO changes -- the horizon probe skip and the cap
+moving 2^30 -> 2^31 -- and this run cannot separate them. Only the x3.08 from
+bucketing is cleanly attributed, because that pair of runs differed in one
+toggle.
+
+**Still single-seed.** A 64-bit Zobrist collision could have pruned a subtree
+holding a real mate. The depth-26 claim carries the same unquantified residual
+as every other bound here until re-run under `--seed 0xC0FFEE`.
+
+Depth 28 projects to ~450G nodes at x4.3, roughly two hours, and the table is
+already 100% full at 2^31 -- which is 32 GiB, half of this machine's RAM and
+the largest the memory guard allows without `--force-tt`. Capacity, not
+replacement policy, is now the binding constraint.

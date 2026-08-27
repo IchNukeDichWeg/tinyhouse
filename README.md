@@ -101,40 +101,37 @@ summary line per completed depth.
 Run them one after the other; two concurrent 16-worker hunts would oversubscribe
 even an 18-core machine.
 
-Measured, White from the start position, 16 workers, `--tt 30`, on an 18-core M5 Pro
-(one run per build, not medians). The two columns are the direct-mapped table and the
-4-way bucketed one that replaced it:
+Measured, White from the start position, 16 workers, on an 18-core M5 Pro. Three
+runs of the same command across three engine builds, one run each, not medians:
 
-| depth | 18 | 20 | 22 | 24 | total |
+| depth | 18 | 20 | 22 | 24 | 26 | whole run |
+|---|---|---|---|---|---|---|
+| direct-mapped, `--tt 30` | 3.6s | 24.3s | 133.1s | 1990.2s | - | 128.6G / **35.9 min** |
+| 4-way bucketed, `--tt 30` | 4.4s | 25.4s | 119.6s | 548.5s | - | 37.8G / **11.6 min** |
+| + horizon skip, `--tt 31` | 2.9s | 22.4s | 102.2s | **397.6s** | **1747.6s** | 137.9G / **37.9 min** |
+
+**Depth 24 is x5.01 faster than it was, on 4.86x fewer nodes.** The clearest way
+to read the table is the last column: the original engine needed 35.9 minutes to
+reach depth 24, and the current one reaches **depth 26** in 37.9. Two extra plies
+for two extra minutes.
+
+Per-2-ply growth, which is what actually decides whether the next depth is
+affordable:
+
+| | d18 | d20 | d22 | d24 | d26 |
 |---|---|---|---|---|---|
-| nodes, direct-mapped | 205M | 1.39G | 7.85G | 119G | 128.6G |
-| nodes, bucketed | 249M | 1.42G | 6.73G | **29.4G** | **37.8G** |
-| time, direct-mapped | 3.6s | 24.3s | 133.1s | 1990.2s | 35.9 min |
-| time, bucketed | 4.4s | 25.4s | 119.6s | **548.5s** | **11.6 min** |
-| growth, direct-mapped | x7.4 | x6.8 | x5.6 | **x15.2** | |
-| growth, bucketed | x8.9 | x5.7 | x4.7 | **x4.4** | |
-| occupancy after | 2% | 14% | 64% | **100%** | |
+| direct-mapped | x7.4 | x6.8 | x5.6 | **x15.2** | - |
+| current | x7.0 | x7.7 | x4.7 | x3.6 | **x4.3** |
 
-**x3.08 overall, and the entire win is at depth 24.** Depths 18-20 sit at 2-14%
-occupancy, where a bucket nearly always has a free slot, so bucketing does nothing and
-what you see is 16-worker nondeterminism. Depth 24 runs at 100% occupancy, which is
-the only place associativity can pay.
+The x15.2 was replacement thrashing at 100% occupancy, not tree growth. With
+associativity the factor stays near x4 even as the table saturates again at
+depth 26, which is why depth 26 cost 29 minutes against the 8-to-10 hours the
+old figures extrapolated to.
 
-**The growth explosion was replacement thrashing, not tree growth.** The direct-mapped
-run's factor fell x7.4, x6.8, x5.6 and then tripled to x15.2 the moment the table
-filled; the bucketed run goes x8.9, x5.7, x4.7, x4.4 and is still falling. The x15.2
-was recorded here as "consistent with saturation, not evidence for it" pending a
-controlled comparison. This is that comparison.
-
-NPS fell from 59.83M to 53.62M across the same change. It is not the metric; see the
-sweep under `--tt` below, where the fastest table in the file posts the highest nps and
-takes four times as long.
-
-Depth 26 is now plausible rather than an overnight job: x4.4 off 29.4G projects near
-130G nodes, roughly 40 minutes at this rate. Treat that as an extrapolation across a
-saturation boundary, which is exactly the kind that just proved wrong by a factor of
-three -- the table is already 100% full at depth 24, so `--tt 31` is the sensible
-setting and the real number will come from running it.
+Depth 28 projects to roughly 450G nodes at x4.3, call it two hours, and the
+table is 100% full at 2^31 so it would want more than the 32 GiB this machine
+can safely give it. That is the point where capacity, not policy, becomes the
+binding constraint.
 
 `color 0` hunts a White forced win and `1` hunts Black. `--tt BITS` is log2 of a
 CAP on transposition-table entries, so 28 caps at 4 GiB — see below; it is not an
@@ -218,8 +215,10 @@ checking the growth policy's choices at your real depth:
 
 Written down so nobody has to work it out twice.
 
-The game value itself. Neither side has a forced win within 24 (White) or 22 (Black)
-plies; past that it is open. A draw can only be proven where no line still reaches the horizon, which
+The game value itself. Neither side has a forced win within 26 (White) or 22 (Black)
+plies; past that it is open. The Black bound is now four plies behind the White one
+and was taken on a different machine under an older engine, so it is the cheaper of
+the two to advance. A draw can only be proven where no line still reaches the horizon, which
 today means bare kings around depth 80 and nothing resembling the start position.
 
 A second-seed re-verification of both published bounds at full depth. The wins have
