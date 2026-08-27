@@ -694,7 +694,27 @@ static inline int tt_rank(uint64_t d) {
     return (proven << 8) | (int)(uint8_t)(d >> 32);
 #endif
 }
+/* TH-50: the repetition scan walks path[] backwards two plies at a time at
+ * EVERY node, and it almost never finds anything: instrumented over a depth-18
+ * hunt it ran 582,301,361 iterations for 78,141 hits, a 0.013% yield and 7.04
+ * iterations per node. A 64-bit Bloom filter over the low bits of the keys on
+ * the current path answers "definitely absent" for most of them.
+ * path_bloom[ply] is the OR of one bit per key at the same parity from the
+ * root to here, so a key whose bit is clear in path_bloom[ply-2] cannot be in
+ * the scan and the loop is skipped whole. A set bit means "maybe" and the scan
+ * runs exactly as before, so this cannot change a single node.
+ *
+ * Small: +0.89% against a 0.74% control floor, and the loop it skips was
+ * already L1-resident and well predicted. Kept because it is free of risk and
+ * grows with depth, not because it is a lever.
+ *   0  always scan (the node-identity pin)
+ *   1  Bloom-gate the scan (shipped) */
+#define REP_BLOOM 1
+
 static _Thread_local uint64_t path[MAXPLY];
+#if REP_BLOOM
+static _Thread_local uint64_t path_bloom[MAXPLY];
+#endif
 static _Thread_local int16_t history[2][2048];
 static _Thread_local uint16_t killers[MAXPLY][2];
 static _Thread_local uint64_t tl_pending = 0;
@@ -1121,10 +1141,17 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 #elif KEY_PARANOIA
     if (key != th_key(p)) { fprintf(stderr, "incremental key mismatch at ply %d\n", ply); abort(); }
 #endif
+#if REP_BLOOM
+    uint64_t seen = ply >= 2 ? path_bloom[ply - 2] : 0;
+    if ((seen >> (key & 63)) & 1)
+#endif
     for (int j = ply - 2; j >= 0; j -= 2)
         if (path[j] == key) { si->rep_min = j; si->snd = SND_LB | SND_UB; return 0; }
     if (ply >= MAXPLY - 2) return 0;
     path[ply] = key;
+#if REP_BLOOM
+    path_bloom[ply] = seen | (uint64_t)1 << (key & 63);
+#endif
 
 #if HORIZON_SKIP_TT
     if (depth <= 0) {
