@@ -215,10 +215,9 @@ checking the growth policy's choices at your real depth:
 
 Written down so nobody has to work it out twice.
 
-The game value itself. Neither side has a forced win within 26 (White) or 22 (Black)
-plies; past that it is open. The Black bound is now four plies behind the White one
-and was taken on a different machine under an older engine, so it is the cheaper of
-the two to advance. A draw can only be proven where no line still reaches the horizon, which
+The game value itself. Neither side has a forced win within 26 (White) or 28 (Black)
+plies; past that it is open. Both are now on the same engine and machine. Black runs
+about a seventh of White's tree at equal depth, so it is the cheaper side to push. A draw can only be proven where no line still reaches the horizon, which
 today means bare kings around depth 80 and nothing resembling the start position.
 
 A second-seed re-verification of both published bounds at full depth. The wins have

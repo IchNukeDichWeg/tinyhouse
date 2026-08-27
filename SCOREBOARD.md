@@ -2232,3 +2232,43 @@ Depth 28 projects to ~450G nodes at x4.3, roughly two hours, and the table is
 already 100% full at 2^31 -- which is 32 GiB, half of this machine's RAM and
 the largest the memory guard allows without `--force-tt`. Capacity, not
 replacement policy, is now the binding constraint.
+
+## Post-campaign: the BLACK bound reaches depth 28
+
+No forced Black win from `fuwk/3p/P3/KWUF[-] w` within **28 plies**, superseding
+a depth-22 bound taken on the old 10-core M2 Pro under a long-dead build. Both
+sides now stand on the same engine and machine for the first time:
+**26 White / 28 Black**.
+
+One run, 16 workers, build `17058640857953325544`, M5 Pro 18 cores / 64 GiB.
+189,713,209,576 nodes over the whole run in 2742.1s (45.7 min).
+
+| depth | 22 | 24 | 26 | 28 |
+|---|---|---|---|---|
+| nodes | 2,620,590,190 | 14,278,837,586 | 21,454,124,057 | 150,555,712,885 |
+| seconds | 27.4 | 215.7 | 341.3 | 2153.0 |
+
+**These timings are contaminated and must not be pooled with the White run.**
+Depths through 22 were searched through a stunted 2^20 table caused by the
+growth/resume bug fixed the same session, so the depth-22 count measures the
+bug and not Black's tree, and the d24->d26 growth of x1.5 reflects the table
+reaching 2^30 mid-run rather than anything about the search. The BOUND is
+unaffected -- a null-window hunt returning 0 proves the negative whatever size
+the table was -- but the seconds column is not a measurement of anything.
+
+The run also never reached its requested `--tt 31`. Growth to 2^31 needs a new
+32 GiB block alongside the live 16 GiB, and the machine could not spare 48 GiB
+peak, so depths 24-28 ran at 2^30, 100% full from depth 26 on.
+
+**Repetition, measured while answering whether shuffle lines are wasted work.**
+They are cut, before the TT probe and before any generation, and they are
+negligible: at depth 18 only 0.11% of White nodes and 0.07% of Black nodes exit
+by repetition. They are also not waste -- in a "no forced win" proof the
+defender's ability to repeat is exactly what proves the negative, which is why
+`rep_min` gates the store rather than the search pruning them.
+
+The mechanism's real cost is 8.3 path compares per node, paid at EVERY node
+because this game has no irreversible moves: chess scans back only to the last
+capture or pawn move, and here there is no such point. A presence filter over
+the path would skip most of those compares, but the ceiling is 1-2%, at or
+under the noise floor these campaigns measure at. Left alone deliberately.
