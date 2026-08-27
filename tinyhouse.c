@@ -25,6 +25,7 @@ enum { P, F, U, W, K };
 /* neighbor tables, 0xff-terminated */
 static uint8_t ORTH[16][5], DIAG[16][5], KINGN[16][9];
 static uint8_t MAO_MOVES[16][9][2], MAO_ATT[16][9][2]; /* (blocker,dest) / (origin,blocker) */
+static uint16_t MAO_LEGS[16];   /* [king sq] -> mask of squares whose vacating can expose it */
 static uint8_t PCAPS[2][16][3];
 
 /* TH-48: order_score asks "does this move give direct check" for EVERY move of
@@ -108,6 +109,9 @@ static void init_tables(void) {
                     CHK_MAO_LEG[ks][from] = MAO_MOVES[from][i][0];
                 }
         }
+    for (int ks = 0; ks < 16; ks++)
+        for (int i = 0; MAO_ATT[ks][i][0] != 0xff; i++)
+            MAO_LEGS[ks] |= (uint16_t)(1u << MAO_ATT[ks][i][1]);
     tables_ready = 1;
 }
 
@@ -174,7 +178,14 @@ int th_in_check(const THPos *p, int color) {
  * perft and neutral-to-negative inside search(), and those are separate claims
  * that deserve separate measurements. */
 #define FAST_LEGALITY 1
-#define FAST_LEGALITY_IN_SEARCH 0
+/* TH-52: measured neutral-to-negative inside search() and left off, and the
+ * reason was that it paid for an in-check test the node had ALREADY done.
+ * DROP_CHECK_PRUNE_IN_SEARCH calls attacked() on the mover's king to prune
+ * drops that cannot answer a check; this toggle called attacked() on the same
+ * square with the same arguments a few lines later, and king_sq() was doubled
+ * the same way. Hoisting both to one computation turns the shortcut from
+ * neutral into +1.4% (11.244s -> 11.101s, control floor 0.74%). */
+#define FAST_LEGALITY_IN_SEARCH 1
 
 static int attacked(const THPos *p, int sq, int by);
 
@@ -182,6 +193,11 @@ static int cannot_expose_king(const THPos *p, uint16_t m, int ks) {
     if (M_IS_DROP(m)) return 1;
     int frm = M_FROM(m);
     if (frm == ks) return 0;
+    /* Most squares are not the leg of any mao move that lands on ks, and for
+     * those the walk below can only fall through to 1. MAO_LEGS is built in
+     * init_tables from MAO_ATT, the very table the walk reads, so the two
+     * cannot disagree -- the same construction argument as CHK_FROM. */
+    if (!((MAO_LEGS[ks] >> frm) & 1)) return 1;
     int them = 1 - p->stm;
     for (int i = 0; MAO_ATT[ks][i][0] != 0xff; i++) {
         if (MAO_ATT[ks][i][1] != frm) continue;
@@ -1194,24 +1210,23 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 #endif
 
     uint16_t buf[128];
+    /* TH-52: ONE in-check test and ONE king_sq per interior node, shared by the
+     * drop pruning below and the fast-legality shortcut in the move loop. */
+    int my_ks = king_sq(p, p->stm);
+    int in_chk_root = attacked(p, my_ks, 1 - p->stm);
+    (void)my_ks; (void)in_chk_root;
 #if DROP_CHECK_PRUNE_IN_SEARCH
     /* TH-16, class B. Pruning drops that cannot answer a check removes only
      * ILLEGAL moves, but it is NOT node-identical: order_score produces ties
      * (equal history, usually 0) and the selection sort takes the first index
      * holding the maximum, so shortening the list changes which tied legal move
      * is searched first. Nodes-to-depth is the metric here, not time. */
-    int n = pseudo_moves(p, buf, attacked(p, king_sq(p, p->stm), 1 - p->stm));
+    int n = pseudo_moves(p, buf, in_chk_root);
 #else
     int n = pseudo_moves(p, buf, -1);
 #endif
     int scores[128];
     int enemy_ks = king_sq(p, 1 - p->stm);
-#if KING_SQ_HOIST
-    int my_ks = king_sq(p, p->stm);
-#endif
-#if FAST_LEGALITY_IN_SEARCH
-    int in_chk_root = attacked(p, my_ks, 1 - p->stm);
-#endif
 /* TH-51: the scoring pass and the selection sort's FIRST pass are the same
  * walk over the same array. Instrumented over a depth-18 hunt, an interior
  * node scores 16.7 moves and then spends 30.8 sort comparisons to search 2.09
