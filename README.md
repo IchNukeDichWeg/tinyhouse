@@ -21,7 +21,8 @@ where each one came from.
 | `scripts/census.py` | Exact count of positions reachable from the start, by ply |
 | `scripts/dfpn.py` | Python df-pn reference, and the drivers for the C engine |
 | `scripts/regress.py` | Paired nodes-to-depth and solver-digest regression harness |
-| `scripts/bench_ab.py` | A/B benchmark: fresh process per repeat, interleaved arms |
+| `scripts/nps.py` | **Speed instrument.** Name a toggle or a revision, it builds both arms and measures |
+| `scripts/bench_ab.py` | The A/B engine underneath it: fresh process per repeat, interleaved arms |
 | `scripts/bench_workers.py` | Pick `--workers` and `--tt` by measuring at your depth |
 | `CAMPAIGN.md`, `SCOREBOARD.md` | Every backlog item, its verdict, and the measurement behind it |
 
@@ -84,6 +85,30 @@ budget, and to store-side graph-history interaction, but not to a 64-bit Zobrist
 collision. A collision has no directional structure and could prune a subtree holding
 a real mate. That residual is unquantified rather than zero, which is why re-running
 under a second seed matters for the bounds as much as for the wins.
+
+## Measuring a speed change
+
+```bash
+.venv/bin/python scripts/nps.py --toggle TT_MIN_PROBE_DEPTH=1,2
+```
+
+Builds both arms from `tinyhouse.c`, runs them paired and interleaved with the
+order alternating, discards the first round, and reports the median ratio with a
+sign test. `--rev HEAD~1` compares a revision against the working tree; `--null`
+measures the instrument against itself, which is the only way to learn what it
+can actually resolve.
+
+It picks the metric from the measurement rather than from the operator: arms
+that search identical trees are judged on nps, arms that do not are judged on
+**time to depth** and told so. That distinction is not cosmetic -- the depth-1
+probe gate searches 7% more nodes and is 20% faster, and reading it as nps gets
+the sign of the conclusion wrong.
+
+Two habits worth keeping. Anything priced under ~2% needs `--repeat 3`, and the
+spread BETWEEN passes is the floor -- a tight within-run spread and a small p do
+not license a small claim. And the tool warns when the load average was above 2:
+memory contention flatters changes that cut memory traffic, which is how one
+reading in this repo came in at +45% for something worth +20%.
 
 ## Pushing the bounds deeper
 
