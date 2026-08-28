@@ -1096,6 +1096,9 @@ static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks
  *   3  skip it at depths 1 and 2 (measured worse) */
 #define TT_MIN_PROBE_DEPTH 2
 
+/* 0 = no prefetch (the pre-change pin); 1 = shipped. See TH-54 below. */
+#define TT_PREFETCH 1
+
 /* Enough to cover the first legal move nearly always: the fallback below tries
  * 2.3 moves on average before one is legal. Overshoots to a square boundary. */
 
@@ -1294,6 +1297,26 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
         for (int j = i + 1; j < n; j++) if (scores[j] > scores[bi]) bi = j;
         uint16_t m = buf[bi]; buf[bi] = buf[i]; scores[bi] = scores[i]; buf[i] = m;
         uint64_t ckey = key_after(p, m, key);      /* before make: reads the pre-move board */
+        /* TH-54: the child probes this bucket after make(), the mate-distance
+         * clamp and the repetition scan -- 30-odd instructions of cover for a
+         * load that misses to DRAM. Prefetch is semantically nothing, so this
+         * is node-identical.
+         *
+         * The gate is the point. `depth - 1 >= TT_MIN_PROBE_DEPTH` means "the
+         * child will actually probe": a horizon child never does, and neither
+         * does one below the probe gate. Written as depth >= 2 instead -- which
+         * prefetches for depth-1 children that TT_MIN_PROBE_DEPTH just stopped
+         * probing -- it measured +15.4% against the gate's +19.5%, i.e. it gave
+         * back a fifth of the win in wasted bandwidth.
+         *
+         * An earlier campaign rejected prefetch as NULL at 2^22 and 2^26. That
+         * verdict stands for those sizes and is why this is toggled: at 2^30 on
+         * the base build it measures +2.11% against a 0.16% floor. On top of the
+         * depth-1 gate two runs gave +0.55% (floor 0.43%) and +4.7% (floor
+         * 1.0%), so the magnitude there is UNRESOLVED -- positive in every run,
+         * worth one instruction, not worth quoting a number for. */
+        if (TT_PREFETCH && tt && depth - 1 >= TT_MIN_PROBE_DEPTH)
+            __builtin_prefetch(&tt[TT_BUCKET(ckey & tt_mask)]);
 #if FAST_LEGALITY_IN_SEARCH
         if (!in_chk_root && cannot_expose_king(p, m, my_ks)) {
             make(p, m, &u);
