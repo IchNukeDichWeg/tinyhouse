@@ -18,8 +18,10 @@ reloads the table, so an interrupted run costs at most the depth it died in.
 --fresh ignores any checkpoint. Ctrl-C is safe and leaves a usable checkpoint.
 
 There is no honest overall ETA: the proof depth, if one exists, is unknown.
-The ETA shown covers the current depth only, extrapolated from the measured
-growth factor between the last two completed depths.
+The ETA shown covers the current depth only. It comes from MEASURED_NODES --
+the node counts of completed passes -- rescaled to whatever this run is
+actually costing, and falls back to the growth factor between the last two
+depths only where no measurement exists.
 
 WORKERS: defaults to 1, because lazy SMP is nondeterministic - helpers
 perturb move ordering, so the same depth run twice gives different node counts
@@ -404,6 +406,55 @@ if len(state["depths"]) >= 2:
     growth = max(state["depths"][-1]["nodes"] / max(state["depths"][-2]["nodes"], 1), 2.0)
 
 
+# Node counts from one completed pass of each colour: 16 workers, tt 2^31,
+# seed 0, on the build of 2026-08-28. These exist because the growth ratio is
+# NOT smooth and extrapolating from it fails exactly where it matters. White
+# ran x4.7, x3.6, x4.3, x3.9 for four straight transitions and then broke
+# x8.5 at depth 28; Black did the same thing at the same depth. An estimate
+# built from the previous ratio called depth 28 at 416.51G, so the run read
+# "36% done" while sitting at 633G and under a quarter of the way. That number
+# is the one a person uses to decide whether to wait or kill a run.
+#
+# NOT reproducible to the digit. Lazy SMP makes node counts vary run to run,
+# and they move with worker count, table size, seed and any search change. The
+# table supplies the SHAPE of the curve; estimate_nodes rescales it on the
+# deepest depth this run and the table share, so a run that is 30% heavier
+# than the table gets a 30% heavier prediction. Extend it when a depth
+# completes rather than deriving new entries by arithmetic.
+MEASURED_NODES = {
+    0: {6: 6_258, 8: 24_792, 10: 118_634, 12: 694_895, 14: 5_106_380,
+        16: 25_426_785, 18: 185_673_747, 20: 1_515_326_418, 22: 6_203_192_837,
+        24: 27_175_129_261, 26: 106_389_944_366, 28: 720_270_063_779},
+    1: {6: 1_012, 8: 3_341, 10: 20_726, 12: 133_967, 14: 847_243,
+        16: 5_652_828, 18: 48_484_866, 20: 188_823_771, 22: 1_206_789_405,
+        24: 11_602_010_099, 26: 24_576_885_226, 28: 210_033_942_206,
+        30: 762_410_631_416},
+}
+
+
+def estimate_nodes(color, depth, depths_done, growth):
+    """Nodes the depth about to run will cost, or None at the first depth.
+
+    Three sources, best first. A measured count for this colour and depth,
+    rescaled by what this run has actually cost at the deepest shared depth.
+    Failing that, the OTHER colour's ratio across the same transition, which
+    is what would have caught the depth-28 step: both colours take it, and
+    neither colour's own history predicts it. Failing that, the previous
+    growth factor, which is where this started.
+    """
+    done = {e["depth"]: e["nodes"] for e in depths_done}
+    prev = done.get(depth - 2)
+    table = MEASURED_NODES.get(color, {})
+    if depth in table:
+        shared = [d for d in done if d in table and table[d] > 0]
+        scale = done[max(shared)] / table[max(shared)] if shared else 1.0
+        return table[depth] * scale
+    other = MEASURED_NODES.get(1 - color, {})
+    if prev and depth in other and other.get(depth - 2):
+        return prev * (other[depth] / other[depth - 2])
+    return prev * growth if prev else None
+
+
 def fmt(n):
     for u, d in (("G", 1e9), ("M", 1e6), ("k", 1e3)):
         if n >= d:
@@ -437,10 +488,10 @@ def progress_line(d, n, nps, dt, est):
     ETA is worse than no ETA: it is the one number a person uses to decide
     whether to wait or kill the run.
 
-    The estimate is prev_depth_nodes * growth, and growth is measured from the
-    depth before that, so it is only ever a guess -- a table that saturates
-    mid-depth breaks it badly, which is precisely when the run is slowest and
-    the ETA matters most.
+    The estimate comes from estimate_nodes, so it is a rescaled measurement
+    where one exists and a guess otherwise -- a table that saturates mid-depth
+    still breaks it, which is precisely when the run is slowest and the ETA
+    matters most.
     """
     line = f"depth {d:2d}  RUNNING  {fmt(n)} nodes | {fmt(nps)}nps | {dt:.0f}s"
     if not est:
@@ -453,7 +504,7 @@ def progress_line(d, n, nps, dt, est):
 for d in range(start_depth, args.maxdepth + 1, 2):
     t0 = time.perf_counter()
     n0 = E.lib.th_nodes()
-    est = prev_nodes * growth if prev_nodes else None
+    est = estimate_nodes(args.color, d, state["depths"], growth)
     done = threading.Event()
     result = {}
 

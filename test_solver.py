@@ -924,6 +924,9 @@ def _solve_hunt_symbol(name):
     import re
     src = (DIR / "solve_hunt.py").read_text()
     ns = {}
+    table = re.search(r"^MEASURED_NODES = \{.*?^\}$", src, re.S | re.M)
+    if table:
+        exec(table.group(0), ns)
     exec(re.search(r"def fmt\(.*?\n\n", src, re.S).group(0), ns)
     exec(re.search(r"def %s\(.*?\n\n\n" % name, src, re.S).group(0), ns)
     return ns[name]
@@ -1016,3 +1019,56 @@ def test_resume_resizes_the_table_before_the_next_depth(tmp_path):
     assert "d22" not in body and "depth 22" not in body, \
         f"table grew only AFTER depth 22 ran:\n{out.stdout}"
     assert json.loads(state.read_text())["tt_bits_now"] > 20
+
+
+def test_depth_estimate_borrows_the_other_colour_across_the_depth_28_step():
+    """Neither colour's own growth history predicts the step both of them take.
+
+    White ran x4.7, x3.6, x4.3, x3.9 across four straight transitions, so the
+    previous-ratio estimate called depth 28 at 416.51G. The depth passed 633G
+    and was still going, which the run reported as "36% of est" -- "a bit over
+    a third done" while under a quarter of the way. Black had already taken the
+    same step at the same depth, so the number that would have been close was
+    sitting in the other colour's results the whole time.
+
+    Depth 28 is measured for White now, so it is deleted here to reach the
+    branch under test: the state the run was actually in when it estimated.
+    """
+    est = _solve_hunt_symbol("estimate_nodes")
+    M = est.__globals__["MEASURED_NODES"]     # the dict the function itself reads
+    actual_28 = M[0].pop(28)
+
+    white = [{"depth": d, "nodes": n} for d, n in sorted(M[0].items())]
+    got = est(0, 28, white, 3.9)
+
+    assert M[0][26] * 3.9 < 500e9        # the old estimate, the thing to beat
+    assert got > 633e9, f"estimate {got/1e9:.0f}G is under the observed floor"
+    assert got == pytest.approx(M[0][26] * (M[1][28] / M[1][26]))
+
+    # It still overshot: Black stepped x8.5 and White x6.8, so this is a better
+    # class of guess, not a prediction. Pinned so the gap stays visible.
+    assert 1.15 < got / actual_28 < 1.35
+
+    # a run costing 30% more than the table gets a 30% heavier prediction
+    heavy = [{"depth": d, "nodes": int(n * 1.3)} for d, n in sorted(M[0].items())]
+    assert est(0, 28, heavy, 3.9) == pytest.approx(got * 1.3, rel=1e-6)
+
+
+def test_depth_estimate_prefers_a_measurement_then_falls_back():
+    est = _solve_hunt_symbol("estimate_nodes")
+    M = est.__globals__["MEASURED_NODES"]
+
+    # a measured depth, on a run tracking the table exactly, returns it unchanged
+    black = [{"depth": d, "nodes": n} for d, n in sorted(M[1].items()) if d <= 28]
+    assert est(1, 30, black, 3.6) == pytest.approx(M[1][30])
+
+    # ...and rescaled when the run is not tracking it
+    light = [{"depth": d, "nodes": int(n * 0.8)} for d, n in sorted(M[1].items()) if d <= 28]
+    assert est(1, 30, light, 3.6) == pytest.approx(M[1][30] * 0.8, rel=1e-6)
+
+    # past both tables it falls back to the growth factor, as it always did
+    assert est(1, 32, [{"depth": 30, "nodes": M[1][30]}], 3.6) == pytest.approx(M[1][30] * 3.6)
+
+    # nothing completed yet: no previous depth to scale from, but the table has
+    # the opening depth outright
+    assert est(0, 6, [], 8.0) == pytest.approx(M[0][6])
