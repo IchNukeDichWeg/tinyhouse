@@ -2604,3 +2604,78 @@ unquantified soundness residual for both, and it is the same one the run itself
 prints at the end. Depth 30 for White projects to ~2.6T nodes at Black's x3.6,
 about 10 hours, on a table that has had nothing left to give for two plies --
 capacity, not replacement policy, is the binding constraint now.
+
+## Post-campaign: the transposition table — +19.5%, and a correction
+
+### First, the pricing table above is wrong about `tt_probe`
+
+The duplication method -- perform an operation twice, read the marginal cost
+off the delta -- is valid for compute and **invalid for memory latency**. The
+duplicate probe reads the SAME bucket, so the first probe pulls the line into
+L1 and the second measures L1, not the miss. The tell was the scaling:
+
+| extra same-bucket probe | 2^24 | 2^28 | 2^30 |
+|---|---|---|---|
+| cost | 2.58% | 0.88% | **0.38%** |
+
+A DRAM cost that gets cheaper as the table grows is not a DRAM cost. It only
+looks smaller because the baseline is slower (11.0s -> 14.8s), so the same
+absolute L1 latency is a smaller share.
+
+Corrected instrument: probe a DIFFERENT bucket (`key * 0x9E3779B97F4A7C15 + 1`),
+which is a genuine miss. At 2^30 that costs **-3.53%** for 42.2M extra probes,
+i.e. **~12.4 ns per probe** -- nine times what the broken instrument said. Read
+as an upper bound: the extra access also evicts useful lines.
+
+**`order_score` and the sort pass are unaffected** -- both are compute, both
+were measured correctly, and they remain the two biggest single rows.
+
+### TH-53 · stop probing at depth 1 — CONFIRMED, +19.5%
+
+`HORIZON_SKIP_TT` stopped one ply too late. Probe distribution over a depth-18
+hunt:
+
+| depth | probes | hit % | share of stores |
+|---|---|---|---|
+| **1** | **29,386,814 = 70%** | **4.5%** | 2.6% |
+| 2 | 4,919,627 | 12.7% | 39.4% |
+| 3 | 5,773,587 | 19.1% | 42.7% |
+| >= 4 | 1,977,280 | 23-43% | 15.3% |
+
+70% of every probe in the tree is taken at depth 1, hits 4.5% of the time, and
+the store gate already refuses unproven depth-1 stores. The most numerous probe
+in the search is a random multi-GiB access that almost never writes back.
+
+Class B on purpose: those 4.5% carry real cutoffs, so the tree grows 7.0% and
+the run is still far faster.
+
+| workload | control floor | gain |
+|---|---|---|
+| 1 worker, d18, 2^30 | 0.21% | **+19.5%** (83,473,350 -> 89,301,909 nodes) |
+| 16 workers, d20, 2^30 | 6.2% | **+19.2%** |
+| 1 worker, d18, 2^24 | 0.23% | **+13.7%** |
+
+It pays even at a small table, and it pays at the worker count the hunts
+actually use. **It cannot affect a bound**: refusing a TT cutoff means
+computing the value instead of reading it, so it adds work and can never
+remove a proof. Digest 811f304f1eef7998 and every regression VALUE unchanged;
+only node counts moved, which is the correct signature for this class.
+
+Skipping depths 1 and 2 measured +19.0%, worse -- depth-2 probes hit 12.7% and
+carry the 39.4% of stores depth 1 does not.
+
+### TH-54 · prefetch the child bucket — KEPT, magnitude unresolved
+
+Prefetch was rejected as NULL by an earlier campaign at 2^22 and 2^26. That
+verdict stands for those sizes; at 2^30 on the base build it measures **+2.11%**
+against a 0.16% floor.
+
+**The gate is the whole content of the change.** Written the obvious way, as
+`depth >= 2`, it prefetches for depth-1 children that TH-53 just stopped
+probing: +15.4% against TH-53's own +19.5%, a fifth of the win handed back as
+wasted bandwidth. Gated on `depth - 1 >= TT_MIN_PROBE_DEPTH` the two toggles
+cannot drift.
+
+On top of TH-53 two runs gave +0.55% (floor 0.43%) and +4.7% (floor 1.0%), the
+second on a machine carrying GUI load with 21-25% per-run spreads. Positive in
+every run, one instruction, node-identical -- kept, with **no number claimed**.
