@@ -1069,6 +1069,33 @@ static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks
  *   1  test for the horizon first, and skip the probe there (shipped) */
 #define HORIZON_SKIP_TT 1
 
+/* TH-53: HORIZON_SKIP_TT stopped the probe one ply too late. Instrumented over
+ * a depth-18 hunt, 29,386,814 of 42,057,308 probes -- 70% of every probe in
+ * the tree -- are taken at depth 1, and they hit 4.5% of the time. Meanwhile
+ * the store gate below already refuses unproven depth-1 stores, so they are
+ * only 2.6% of writes. The most numerous probe in the search is a random
+ * access into a multi-GiB table that almost never writes back and almost
+ * never finds anything.
+ *
+ * NOT free, and not node-identical: a depth-1 position can have been proved by
+ * a deeper node, and those 4.5% carry real cutoffs. Skipping them searches 7.0%
+ * MORE nodes and is still far faster, because a probe at 2^30 costs ~12.4 ns
+ * and the subtree under a depth-1 node is one ply of horizon children.
+ *
+ * Cannot affect a bound. Refusing a TT cutoff only means computing the value
+ * instead of reading it, so this adds work and can never remove a proof.
+ *
+ * Measured, hunt from the start position, against same-build control arms:
+ *   1 worker, d18, 2^30   +19.5%   (nodes 83,473,350 -> 89,301,909)
+ *   16 workers, d20, 2^30 +19.2%   (floor 6.2%, lazy SMP)
+ *   1 worker, d18, 2^24   +13.7%   -- it pays even when the table is small
+ * Value 3, skipping depths 1 AND 2, measured +19.0%: worse, because depth-2
+ * probes hit 12.7% and carry the 39.4% of stores that depth 1 does not.
+ *   1  probe at every interior depth (the node-identity pin)
+ *   2  skip the probe at depth 1 (shipped)
+ *   3  skip it at depths 1 and 2 (measured worse) */
+#define TT_MIN_PROBE_DEPTH 2
+
 /* Enough to cover the first legal move nearly always: the fallback below tries
  * 2.3 moves on average before one is legal. Overshoots to a square boundary. */
 
@@ -1179,7 +1206,7 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 #endif
     uint16_t ttm = 0;
     TTView tv;
-    int tv_hit = tt_probe(key, &tv);
+    int tv_hit = depth >= TT_MIN_PROBE_DEPTH && tt_probe(key, &tv);
     if (tv_hit) {
         ttm = tv.move;
         int v = tv.value;

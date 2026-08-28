@@ -12,7 +12,7 @@
    "value": 0,
    "snd": 0,
    "best": "c1b3",
-   "nodes": 26054
+   "nodes": 26088
   },
   {
    "tfen": "fuwk/3p/P3/KWUF[-] w",
@@ -20,7 +20,7 @@
    "value": 0,
    "snd": 0,
    "best": "c1b3",
-   "nodes": 209834
+   "nodes": 210288
   },
   {
    "tfen": "fuwk/3p/P1F1/KWU1[-] b",
@@ -28,7 +28,7 @@
    "value": 29991,
    "snd": 1,
    "best": "b4c2",
-   "nodes": 36207
+   "nodes": 36222
   },
   {
    "tfen": "fuwk/3p/P1F1/KWU1[-] b",
@@ -36,7 +36,7 @@
    "value": 29991,
    "snd": 1,
    "best": "b4c2",
-   "nodes": 133807
+   "nodes": 133931
   },
   {
    "tfen": "1uwk/1f1p/PW2/K1UF[-] w",
@@ -44,7 +44,7 @@
    "value": 0,
    "snd": 0,
    "best": "c1b3",
-   "nodes": 84877
+   "nodes": 85027
   },
   {
    "tfen": "1uwk/1f1p/PW2/K1UF[-] w",
@@ -52,7 +52,7 @@
    "value": 0,
    "snd": 0,
    "best": "c1b3",
-   "nodes": 665193
+   "nodes": 667629
   },
   {
    "tfen": "1uwk/Pf1p/4/KWUF[-] w",
@@ -60,7 +60,7 @@
    "value": 0,
    "snd": 0,
    "best": "c1b3",
-   "nodes": 54760
+   "nodes": 54820
   },
   {
    "tfen": "1uwk/Pf1p/4/KWUF[-] w",
@@ -68,7 +68,7 @@
    "value": 0,
    "snd": 0,
    "best": "c1b3",
-   "nodes": 599244
+   "nodes": 601069
   },
   {
    "tfen": "f1w1/2k1/K2p/W1UF[Up] b",
@@ -76,7 +76,7 @@
    "value": 0,
    "snd": 0,
    "best": "d2c1=U",
-   "nodes": 288302
+   "nodes": 288270
   },
   {
    "tfen": "f1w1/2k1/K2p/W1UF[Up] b",
@@ -84,7 +84,7 @@
    "value": 0,
    "snd": 0,
    "best": "d2c1=U",
-   "nodes": 2599509
+   "nodes": 2611212
   },
   {
    "tfen": "1k2/4/2K1/4[PFUWpfuw] w",
@@ -92,7 +92,7 @@
    "value": 29995,
    "snd": 1,
    "best": "P@c3",
-   "nodes": 26345
+   "nodes": 26368
   },
   {
    "tfen": "1k2/4/2K1/4[PFUWpfuw] w",
@@ -100,7 +100,7 @@
    "value": 29995,
    "snd": 1,
    "best": "P@c3",
-   "nodes": 91628
+   "nodes": 91904
   },
   {
    "tfen": "1uwk/P3/3p/K2F[UWf] w",
@@ -108,7 +108,7 @@
    "value": 0,
    "snd": 0,
    "best": "U@c2",
-   "nodes": 196419
+   "nodes": 196835
   },
   {
    "tfen": "1uwk/P3/3p/K2F[UWf] w",
@@ -116,7 +116,7 @@
    "value": 0,
    "snd": 0,
    "best": "U@c2",
-   "nodes": 1520220
+   "nodes": 1533192
   },
   {
    "tfen": "3k/1U2/4/K3[f] b",
@@ -124,7 +124,7 @@
    "value": 0,
    "snd": 0,
    "best": "d4c4",
-   "nodes": 21093
+   "nodes": 21411
   },
   {
    "tfen": "3k/1U2/4/K3[f] b",
@@ -132,7 +132,7 @@
    "value": 0,
    "snd": 0,
    "best": "d4c4",
-   "nodes": 112792
+   "nodes": 115883
   }
  ]
 }
