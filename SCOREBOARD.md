@@ -2679,3 +2679,64 @@ cannot drift.
 On top of TH-53 two runs gave +0.55% (floor 0.43%) and +4.7% (floor 1.0%), the
 second on a machine carrying GUI load with 21-25% per-run spreads. Positive in
 every run, one instruction, node-identical -- kept, with **no number claimed**.
+
+## Post-campaign: TH-55 · ordering at depth 1 — CONFIRMED, +19%
+
+The depth-1 probe gate raised the obvious next question: what ELSE does a
+depth-1 node do that it does not need? Instrumented by depth over a depth-18
+hunt:
+
+| depth | share of interior | moves generated | moves tried | cutoff % | cut on 1st |
+|---|---|---|---|---|---|
+| **1** | **72.6%** | **17.21** | **0.99** | 99.4% | **100.0%** |
+| 2 | 11.1% | 13.27 | 9.14 | 2.3% | 48.5% |
+| 3 | 11.9% | 16.66 | 1.02 | 98.6% | 99.1% |
+| 4 | 1.9% | 13.43 | 8.61 | 6.1% | 56.1% |
+
+Depth-1 nodes are 72.6% of all interior nodes, generate 17.21 moves, search
+0.99 of them, and **every single one of their cutoffs comes on the first move
+tried**. That is structural: in a null-window mate hunt, at depth 1 any move
+whose child returns the horizon's unknown 0 already fails high, so which move
+goes first cannot matter. The node was still scoring all 17.21 and running a
+full max-scan over them -- 512M of the search's 661M `order_score` calls.
+
+**Depth 1 only, and the sweep is the argument.** Odd depths all look alike in
+the table, which invites a higher threshold. It loses badly, because a higher
+threshold also catches depth 2, where ordering is doing real work:
+
+| ORDER_MIN_DEPTH | nodes at d17 | result |
+|---|---|---|
+| **2** (depth 1 only) | 59.3M -> 64.1M | **+19.15%** |
+| 3 (also depth 2) | -> 129.6M (+118%) | -16.43% |
+| 4 | -> 156.3M (+163%) | -28.14% |
+
+| workload | passes | floor | gain |
+|---|---|---|---|
+| 1 worker, d17, 2^24 | 1.1937 / 1.1897 / 1.1915 | 0.40pp | **+19.15%**, p=2.33e-10 |
+| 16 workers, d20, 2^30 | 1.2303 / 1.1694 / 1.1967 | 6.09pp | **+19.67%**, p=0.000488 |
+
+Class B, and correctness rests on the plainest fact in alpha-beta: the value is
+independent of move order, so no bound is at risk. The harness confirms rather
+than assumes it -- digest 811f304f1eef7998 with every value AND soundness flag
+identical across all 16 rows, on 4.26% FEWER nodes.
+
+### Compiler flags — all NULL
+
+Never questioned before: `engine_c.py` builds with a plain `-O2 -pthread
+-shared` on Apple Silicon. Six variants, every one inside the noise, none with
+p below 0.07: `-O3` -0.70%, `-mcpu=native` -0.13%, `-O3 -mcpu=native` -0.57%,
+`-flto` +0.43%, `-O3 -mcpu=native -flto` +0.38%, `-funroll-loops` -0.25%.
+`-O2` is leaving nothing on the table here, and that is now measured.
+
+### What this pair of depth-1 changes says
+
+Both wins this round came from the same observation: **the most numerous node
+class in the tree was paying for machinery that class cannot use.** Depth 1 is
+72.6% of interior nodes; it was probing a multi-GiB table that hits 4.5% of the
+time, and ordering 17 moves to search one. Neither was found by a profiler --
+both came from counting what each depth actually does.
+
+Also worth recording: these are NOT nps wins. Both search MORE nodes at one
+worker (+7.0% and +8.0%) and are ~19% faster in time to depth. Reported as nps
+they would read as regressions, which is why `scripts/nps.py` now picks the
+metric from the node counts instead of from the operator.
