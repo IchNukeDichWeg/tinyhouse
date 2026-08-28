@@ -53,9 +53,9 @@ can query directly with `sqlite3 analysis.sqlite 'SELECT json FROM analysis'`.
 ## What is proven
 
 The game is not solved. `solve_status.json` has the machine-readable version; in
-short, there is no forced White win within 20 plies (729M nodes) and no forced Black
-win within 22 plies (303M nodes). The value of the game is still open, and consistent
-with a draw.
+short, there is no forced White win within **28** plies (861.8G nodes) and no forced
+Black win within **30** plies (1,010.1G nodes). The value of the game is still open,
+and consistent with a draw.
 
 Forced wins are proven and displayed when they fall inside the horizon. The sharpest
 one is that `1.Fd1-c2??` loses outright:
@@ -91,11 +91,11 @@ under a second seed matters for the bounds as much as for the wins.
 summary line per completed depth.
 
 ```bash
-.venv/bin/python solve_hunt.py 0 --tt 31 --workers 16 --maxdepth 26
+.venv/bin/python solve_hunt.py 0 --tt 31 --workers 16 --maxdepth 28
 ```
 
 ```bash
-.venv/bin/python solve_hunt.py 1 --tt 31 --workers 16 --maxdepth 28
+.venv/bin/python solve_hunt.py 1 --tt 31 --workers 16 --maxdepth 30
 ```
 
 Run them one after the other; two concurrent 16-worker hunts would oversubscribe
@@ -104,34 +104,51 @@ even an 18-core machine.
 Measured, White from the start position, 16 workers, on an 18-core M5 Pro. Three
 runs of the same command across three engine builds, one run each, not medians:
 
-| depth | 18 | 20 | 22 | 24 | 26 | whole run |
-|---|---|---|---|---|---|---|
-| direct-mapped, `--tt 30` | 3.6s | 24.3s | 133.1s | 1990.2s | - | 128.6G / **35.9 min** |
-| 4-way bucketed, `--tt 30` | 4.4s | 25.4s | 119.6s | 548.5s | - | 37.8G / **11.6 min** |
-| + horizon skip, `--tt 31` | 2.9s | 22.4s | 102.2s | **397.6s** | **1747.6s** | 137.9G / **37.9 min** |
+| depth | 18 | 20 | 22 | 24 | 26 | 28 | whole run |
+|---|---|---|---|---|---|---|---|
+| direct-mapped, `--tt 30` | 3.6s | 24.3s | 133.1s | 1990.2s | - | - | 128.6G / **35.9 min** |
+| 4-way bucketed, `--tt 30` | 4.4s | 25.4s | 119.6s | 548.5s | - | - | 37.8G / **11.6 min** |
+| + horizon skip, `--tt 31` | 2.9s | 22.4s | 102.2s | 397.6s | 1747.6s | - | 137.9G / **37.9 min** |
+| + ordering work, `--tt 31` | 2.5s | 20.0s | 85.7s | **402.6s** | **1523.1s** | **10231.6s** | 861.8G / **3.41 h** |
 
-**Depth 24 is x5.01 faster than it was, on 4.86x fewer nodes.** The clearest way
+**Depth 24 is x4.94 faster than it was, on 4.38x fewer nodes.** The clearest way
 to read the table is the last column: the original engine needed 35.9 minutes to
-reach depth 24, and the current one reaches **depth 26** in 37.9. Two extra plies
-for two extra minutes.
+reach depth 24, and the current one reaches **depth 26** in 33.9. Two extra plies
+for two fewer minutes.
+
+Read the per-depth seconds across rows with care. Only the last two rows share a
+table size, and only the last row ran with the table at its 2^31 cap from depth 6
+rather than growing into it, which slows the early depths (a 32 GiB table at 0%
+occupancy is all cold DRAM) and speeds the late ones. Depth 24 looks 1.3% SLOWER
+in the last row for that reason while depth 26 is 12.8% faster on 1.3% more nodes
+-- the honest per-node figure between those two rows is **+16.2% nps**, measured
+at depth 26 where both had a saturated table.
 
 Per-2-ply growth, which is what actually decides whether the next depth is
 affordable:
 
-| | d18 | d20 | d22 | d24 | d26 |
-|---|---|---|---|---|---|
-| direct-mapped | x7.4 | x6.8 | x5.6 | **x15.2** | - |
-| current | x7.0 | x7.7 | x4.7 | x3.6 | **x4.3** |
+| | d18 | d20 | d22 | d24 | d26 | d28 | d30 |
+|---|---|---|---|---|---|---|---|
+| direct-mapped, White | x7.4 | x6.8 | x5.6 | **x15.2** | - | - | - |
+| current, White | x7.3 | x8.2 | x4.1 | x4.4 | x3.9 | **x6.8** | - |
+| current, Black | x8.6 | x3.9 | x6.4 | x9.6 | x2.1 | **x8.5** | x3.6 |
 
-The x15.2 was replacement thrashing at 100% occupancy, not tree growth. With
-associativity the factor stays near x4 even as the table saturates again at
-depth 26, which is why depth 26 cost 29 minutes against the 8-to-10 hours the
-old figures extrapolated to.
+The x15.2 was replacement thrashing at 100% occupancy, not tree growth, and
+associativity removed it.
 
-Depth 28 projects to roughly 450G nodes at x4.3, call it two hours, and the
-table is 100% full at 2^31 so it would want more than the 32 GiB this machine
-can safely give it. That is the point where capacity, not policy, becomes the
-binding constraint.
+**Depth 28 is where the growth factor jumps, for BOTH colours, and neither
+colour's own history predicts it.** White sat between x3.9 and x4.4 for three
+straight transitions and then stepped x6.8; Black stepped x8.5 at the same
+place. This is not a curiosity: `solve_hunt.py` used to build its per-depth ETA
+from the previous growth factor, which called White's depth 28 at 416.51G
+against an actual 720.27G, so the run reported "36% of est" while under a
+quarter of the way through. It now estimates from `MEASURED_NODES` instead --
+the counts in this table -- rescaled to what the live run is costing.
+
+Both colours ran with the table 100% full from depth 26 (White) and 28 (Black)
+onward, so capacity, not replacement policy, is now the binding constraint.
+Depth 30 for White would want roughly 2.6T nodes at Black's x3.6 -- about 10
+hours, on a table that has had nothing left to give for two plies.
 
 `color 0` hunts a White forced win and `1` hunts Black. `--tt BITS` is log2 of a
 CAP on transposition-table entries, so 28 caps at 4 GiB — see below; it is not an

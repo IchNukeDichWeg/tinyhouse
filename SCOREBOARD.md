@@ -2544,3 +2544,63 @@ thread-local in a dylib can go through a TLV descriptor CALL. Disassembling the
 shipped build shows zero `tlv_get_addr` sites and `order_score` fully inlined,
 so the compiler had already resolved and hoisted them. Nothing to win; recorded
 so it is not re-derived.
+
+## Post-campaign: WHITE to depth 28, BLACK to depth 30
+
+First pair of bounds taken in one session on one build at one table size, so
+the per-depth timings are directly comparable for the first time. 16 workers,
+tt 2^31 (32 GiB) from depth 6, seed 0, Apple M5 Pro.
+
+| | White | Black |
+|---|---|---|
+| bound | **no forced win within 28 plies** | **no forced win within 30 plies** |
+| deepest slice | 720,270,063,779 nodes / 10,231.6s | 762,410,631,416 / 9,796.2s |
+| whole run from depth 6 | 861,770,708,152 / 3.41 h | 1,010,074,226,106 / 3.65 h |
+| average | 70.3 Mnps | 76.8 Mnps |
+| table | 100% full from depth 26 | 100% full from depth 28 |
+
+**The session's engine work, measured on the real workload: +16.2% nps.** White
+depth 26 went 1747.6s to 1523.1s on 1.3% more nodes (lazy-SMP noise), 60.10 ->
+69.85 Mnps.
+
+That is BELOW the +21.79% measured at depth 18 with one worker, and the gap is
+worker count, not table size. An earlier claim in this file that the gain "does
+not dilute as the table grows" was tested at ONE worker at 2^24 and 2^28 and is
+true there; at 16 workers more of the time is memory stalls that none of these
+changes touch. **Quote +16.2% for the deep hunts and +21.79% for single-thread
+work; they are different questions.**
+
+### The depth-28 step, and the ETA it broke
+
+| growth into | d20 | d22 | d24 | d26 | d28 | d30 |
+|---|---|---|---|---|---|---|
+| White | x8.2 | x4.1 | x4.4 | x3.9 | **x6.8** | - |
+| Black | x3.9 | x6.4 | x9.6 | x2.1 | **x8.5** | x3.6 |
+
+Both colours step at depth 28 and NEITHER colour's own history predicts it.
+White sat in x3.9-x4.4 for three straight transitions; the ETA extrapolated
+from the previous growth factor and called depth 28 at 416.51G against an
+actual 720.27G. The run therefore printed "36% of est" while under a quarter of
+the way through, for over an hour. A wrong ETA is worse than none: it is the
+number a person uses to decide whether to wait or kill a run.
+
+Fixed by estimating from MEASURED_NODES -- the counts above -- rescaled by what
+the live run is actually costing, with the other colour's ratio as the fallback
+where a depth has not been measured. Still a guess: borrowing Black's x8.5 for
+White's depth 28 gives 909G against 720G, 26% high. A better class of wrong.
+
+**Two live estimates of my own, both stated too confidently.** Black to depth 30
+was called at ~2.6h (range 2.0-4.2h) and took 3.65h. White's remaining depth-28
+time was called at ~65 min with a 40-100 min band and took ~20 min, BELOW the
+band -- the x8.545 anchor from Black overshot White's actual x6.77. The
+direction of the miss flipped between the two, which is the useful part: these
+are single-anchor extrapolations across an unmeasured depth, and a stated band
+should have been wider in both cases.
+
+### Owed
+
+Neither bound has been re-run under a second Zobrist seed. That is the one
+unquantified soundness residual for both, and it is the same one the run itself
+prints at the end. Depth 30 for White projects to ~2.6T nodes at Black's x3.6,
+about 10 hours, on a table that has had nothing left to give for two plies --
+capacity, not replacement policy, is the binding constraint now.
