@@ -127,10 +127,10 @@ def source_with_toggle(src, name, value):
     return out
 
 
-def build(src, path):
+def build(src, path, extra=()):
     csrc = path.with_suffix(".c")
     csrc.write_text(src)
-    r = sh(["cc", *CFLAGS, "-DTH_BUILD_ID=1ULL", "-o", str(path), str(csrc)])
+    r = sh(["cc", *CFLAGS, *extra, "-DTH_BUILD_ID=1ULL", "-o", str(path), str(csrc)])
     if r.returncode:
         sys.exit(f"build failed for {path.name}:\n{r.stderr}")
     return path
@@ -212,6 +212,13 @@ def main():
     ap.add_argument("--suite", action="store_true",
                     help="four positions in solve mode instead of the start-position hunt")
     ap.add_argument("--tfen", default=START)
+    ap.add_argument("--cflags-a", default="", metavar="FLAGS",
+                    help="extra cc flags for arm A, appended after the defaults")
+    ap.add_argument("--cflags-b", default="", metavar="FLAGS",
+                    help='extra cc flags for arm B. MUST use the = form, since argparse '
+                         'reads a leading dash as an option: --cflags-b="-O3 -mcpu=apple-m1". '
+                         "engine_c.py folds the flag string into the build id, so a flag "
+                         "change invalidates every .tt dump on purpose.")
     ap.add_argument("--keep", action="store_true", help="keep the built arms and print the paths")
     a = ap.parse_args()
 
@@ -237,10 +244,14 @@ def main():
     else:
         sys.exit("give --toggle, --rev or --null")
 
-    if srcs[0] == srcs[1] and not a.null:
+    if srcs[0] == srcs[1] and not a.null and not (a.cflags_a or a.cflags_b):
         print("NOTE: the two arms are byte-identical. This is a null run.", file=sys.stderr)
 
-    arms = [("A", build(srcs[0], tmp / "A.dylib")), ("B", build(srcs[1], tmp / "B.dylib"))]
+    fa, fb = a.cflags_a.split(), a.cflags_b.split()
+    if fa or fb:
+        label = (f"{label[0]} [{' '.join(CFLAGS + fa)}]", f"{label[1]} [{' '.join(CFLAGS + fb)}]")
+    arms = [("A", build(srcs[0], tmp / "A.dylib", fa)),
+            ("B", build(srcs[1], tmp / "B.dylib", fb))]
     works = ([("solve", t, a.depth, a.color) for t in SUITE] if a.suite
              else [("hunt", a.tfen, a.depth, a.color)])
 
