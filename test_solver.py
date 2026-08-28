@@ -1072,3 +1072,47 @@ def test_depth_estimate_prefers_a_measurement_then_falls_back():
     # nothing completed yet: no previous depth to scale from, but the table has
     # the opening depth outright
     assert est(0, 6, [], 8.0) == pytest.approx(M[0][6])
+
+
+def _nps_symbol(name):
+    """scripts/nps.py parses argv in main(), so its helpers import cleanly."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("nps_mod", DIR / "scripts" / "nps.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return getattr(mod, name)
+
+
+def test_toggle_rewrite_refuses_to_silently_do_nothing():
+    """A no-op rewrite builds two IDENTICAL arms and reports a confident NULL.
+
+    That is the worst failure this tool can have: "the change did not pay" and
+    "I never applied the change" print the same way. So a name that is not
+    there, or is there twice, has to be an exit rather than a pass-through.
+    """
+    rewrite = _nps_symbol("source_with_toggle")
+    src = "#define FOO 1\nint x;\n#define BAR 0\n"
+
+    assert rewrite(src, "FOO", "2") == "#define FOO 2\nint x;\n#define BAR 0\n"
+
+    with pytest.raises(SystemExit):
+        rewrite(src, "NOPE", "1")                 # absent
+    with pytest.raises(SystemExit):
+        rewrite("#define FOO 1\n#define FOO 2\n", "FOO", "3")   # ambiguous
+
+    # a prefix must not match: FOO_BAR is a different toggle from FOO
+    with pytest.raises(SystemExit):
+        rewrite("#define FOO_BAR 1\n", "FOO", "2")
+
+
+def test_sign_test_is_two_sided_and_ignores_exact_ties():
+    sign = _nps_symbol("sign_test")
+
+    k, n, p = sign([1.1] * 8)                     # unanimous
+    assert (k, n) == (8, 8) and p == pytest.approx(2 / 256)
+
+    k, n, p = sign([1.1] * 4 + [0.9] * 4)         # dead even
+    assert (k, n) == (4, 8) and p == pytest.approx(1.0)
+
+    k, n, p = sign([1.1, 1.1, 0.9, 1.0])          # the 1.0 is not evidence either way
+    assert (k, n) == (2, 3)
