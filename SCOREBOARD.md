@@ -2740,3 +2740,46 @@ Also worth recording: these are NOT nps wins. Both search MORE nodes at one
 worker (+7.0% and +8.0%) and are ~19% faster in time to depth. Reported as nps
 they would read as regressions, which is why `scripts/nps.py` now picks the
 metric from the node counts instead of from the operator.
+
+## Post-campaign: TH-56 · lazy generation at unordered depths — REJECTED
+
+After TH-55 stopped ordering at depth 1, those nodes search moves in
+GENERATION order -- so the first move tried is the first move generated, and a
+prefix generator would pick the same one. Depth-1 nodes generate 17.21 moves
+and try 0.99, so building the other 16 looked like free money, and unlike the
+staged-drop attempt this version is genuinely node-identical: gated on the node
+being unordered, regenerating the full list re-emits the same moves in the same
+order into the same buffer, and TH-55's swap guard keeps the already-searched
+prefix untouched.
+
+It delivered the node identity and lost anyway.
+
+| | |
+|---|---|
+| nodes | 64,074,809 both arms -- identical, as claimed |
+| passes | 0.9589 / 0.9595 / 0.9575 |
+| floor | 0.20pp between passes |
+| result | **-4.11%**, 0 of 33 ratios favoured it, p=2.33e-10 |
+
+### Three independent measurements now say the same thing
+
+**Move generation volume is not the lever in this engine.**
+
+| attempt | outcome |
+|---|---|
+| bitboard generation, in-check test and legality filter inside `search()` | node-identical, time NULL on six workloads |
+| staged quiet drops (TH-53 in an earlier section) | 2.5% per node, lost to a 6.2% node increase |
+| prefix generation at unordered depths (this) | node-identical, **-4.11%** |
+
+The common cause is the price of a generated move that is never searched:
+about 2-3 cycles. Removing that work saves almost nothing, while the machinery
+to avoid it -- an extra branch in the hottest loop, a third instantiation of
+`pseudo_moves_n` and its instruction-cache footprint, and a full regeneration
+whenever the prefix is exhausted -- costs more than it saves. Every attempt to
+generate fewer moves has now failed, and the tier-4 profile's "movegen is ~40%
+of a search node" has been contradicted three times.
+
+**What has worked instead, every time, is removing work per node that the node
+could not use**: the horizon's TT probe, the depth-1 TT probe, check detection
+by mask, the fused max-scan, and ordering at depth 1. Not less generation --
+less machinery around it.
