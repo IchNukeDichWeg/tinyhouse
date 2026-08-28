@@ -1273,8 +1273,31 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
  *   1  fused (shipped, +8.42% against a 0.74% control floor) */
 #define ORDER_FUSED_MAX 1
 
+/* TH-55: ordering at depth 1 is doing no work. Instrumented over a depth-18
+ * hunt, depth-1 nodes are 72.6% of all interior nodes, they generate 17.21
+ * moves, they search 0.99 of them, and 100% of their cutoffs come on the first
+ * move tried. That is structural rather than lucky: this is a null-window mate
+ * hunt, so at depth 1 any move whose child returns the horizon's unknown 0
+ * already fails high, and WHICH move that is does not matter. The node still
+ * scored all 17.21 and ran a full max-scan over them -- 512M of the 661M
+ * order_score calls in the search.
+ *
+ * Class B. Which move is searched first changes, so the value a cutoff hands
+ * back can change and the tree moves with it. Soundness does not depend on
+ * move order in alpha-beta, so no bound is at risk.
+ * Depth 1 ONLY, and the sweep is why. Values 3 and 4 also stop ordering at
+ * depth 2, where it is doing real work -- depth-2 nodes try 9.14 moves and
+ * only 48.5% of their cutoffs come first -- and the tree more than doubles:
+ * 59.3M nodes -> 129.6M at 3 (-16.4%) and 156.3M at 4 (-28.1%). The waste is
+ * specific to the depth whose window makes every move equivalent.
+ *   1  order at every interior depth (the node-identity pin)
+ *   2  skip scoring and sorting at depth 1 (shipped) */
+#define ORDER_MIN_DEPTH 2
+
 #if ORDER_FUSED_MAX
     int bi0 = 0;
+    int ordered = depth >= ORDER_MIN_DEPTH;
+    if (ordered)
     for (int i = 0; i < n; i++) {
         scores[i] = order_score(p, buf[i], ttm, ply, enemy_ks);
         if (scores[i] > scores[bi0]) bi0 = i;
@@ -1289,8 +1312,8 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
     uint8_t best_child_ub = 0, all_children_lb = 1, cutoff = 0;
     for (int i = 0; i < n; i++) {
 #if ORDER_FUSED_MAX
-        int bi = i ? i : bi0;
-        if (i)
+        int bi = !ordered ? i : i ? i : bi0;
+        if (ordered && i)
 #else
         int bi = i;
 #endif
