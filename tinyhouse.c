@@ -1318,7 +1318,13 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
         int bi = i;
 #endif
         for (int j = i + 1; j < n; j++) if (scores[j] > scores[bi]) bi = j;
-        uint16_t m = buf[bi]; buf[bi] = buf[i]; scores[bi] = scores[i]; buf[i] = m;
+        /* Guarded because ORDER_MIN_DEPTH made bi == i the COMMON case: at an
+         * unordered depth the swap is a no-op that still reads scores[i],
+         * which is never written there. Reading it is undefined behaviour even
+         * though the value is handed straight back, and at depth 1 it was
+         * 29.7M redundant read-modify-writes. */
+        uint16_t m = buf[bi];
+        if (bi != i) { buf[bi] = buf[i]; scores[bi] = scores[i]; buf[i] = m; }
         uint64_t ckey = key_after(p, m, key);      /* before make: reads the pre-move board */
         /* TH-54: the child probes this bucket after make(), the mate-distance
          * clamp and the repetition scan -- 30-odd instructions of cover for a
