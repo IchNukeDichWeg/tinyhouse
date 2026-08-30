@@ -1028,6 +1028,55 @@ static int gives_direct_check(const THPos *p, uint16_t m, int ks) {
 #endif
 }
 
+/* TH-60: EXACT "does this move give check", evaluated on the pre-move board.
+ *
+ * Sound only because of one invariant: in a legal position the side NOT to
+ * move is never in check, so eks carries no attacker before the move and only
+ * attacks the move CREATES can matter. Two ways exist and there is no third,
+ * because nothing in this game slides: the piece landing on `to` attacks eks
+ * directly, or the move vacates the leg square of a friendly mao whose
+ * destination is eks.
+ *
+ * Where it differs from gives_direct_check, which is ordering-only and says so:
+ *   - the mao leg is tested POST-move. If the leg IS the square being vacated
+ *     the check is real, and reading the pre-move board there says no.
+ *   - discovered checks are included at all.
+ * `to` can never be the leg (a mao's leg is adjacent to its origin) and the
+ * captured piece is replaced by the capturer, so no other square's occupancy
+ * changes in a way that matters.
+ *
+ * Verified against attacked() by th_check_diff over a full walk, not by
+ * inspection: a hand-written second opinion on a predicate like this is what
+ * produced the double-mao-check bug that survived every perft number. */
+static int gives_check_exact(const THPos *p, uint16_t m, int eks) {
+    int us = p->stm, to = M_TO(m);
+    int drop = M_IS_DROP(m) != 0;
+    int frm = drop ? -1 : M_FROM(m);
+    int t = drop ? M_FROM(m) : M_PROMO(m) ? M_PROMO(m) : TYPE(p->board[frm]);
+    switch (t) {
+    case P: if ((CHK_PAWN[us][eks] >> to) & 1) return 1; break;
+    case F: if ((CHK_FROM[F][eks] >> to) & 1) return 1; break;
+    case W: if ((CHK_FROM[W][eks] >> to) & 1) return 1; break;
+    case U:
+        if ((CHK_FROM[U][eks] >> to) & 1) {
+            int leg = CHK_MAO_LEG[eks][to];
+            if (leg == frm || !p->board[leg]) return 1;   /* empty AFTER the move */
+        }
+        break;
+    default: break;                                       /* a king cannot give check */
+    }
+    if (frm >= 0 && ((MAO_LEGS[eks] >> frm) & 1)) {
+        for (int i = 0; MAO_ATT[eks][i][0] != 0xff; i++) {
+            if (MAO_ATT[eks][i][1] != frm) continue;
+            int org = MAO_ATT[eks][i][0];
+            if (org == frm) continue;                     /* the mover itself */
+            int pc = p->board[org];
+            if (pc && COLOR(pc) == us && TYPE(pc) == U) return 1;
+        }
+    }
+    return 0;
+}
+
 static int order_score(const THPos *p, uint16_t m, uint16_t ttm, int ply, int ks) {
     if (m == ttm) return 1 << 30;
     int s = 0;
@@ -1195,7 +1244,18 @@ static int horizon_has_move(THPos *p, int in_check) {
 #endif
 }
 
-static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, uint64_t key) {
+/* TH-60: a horizon node asks attacked() whether it is in check, 37.4M times,
+ * and one extra such call prices at 4.55%. The PARENT already knows: it has
+ * the child's king square in enemy_ks and the move in hand, so
+ * gives_check_exact answers it from masks instead of a neighbour walk. The
+ * hint is computed only where it is used -- when the child is a horizon node,
+ * i.e. at depth-1 nodes -- and -1 means "not supplied, work it out".
+ *   0  every horizon node calls th_in_check (the node-identity pin)
+ *   1  the parent passes the answer down (shipped) */
+#define CHECK_HINT 1
+
+static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, uint64_t key,
+                  int chk_hint) {
     si->rep_min = MAXPLY;
     si->snd = 0;
     si->best = 0;
@@ -1239,7 +1299,7 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 
 #if HORIZON_SKIP_TT
     if (depth <= 0) {
-        int in_chk0 = th_in_check(p, p->stm);
+        int in_chk0 = chk_hint >= 0 ? chk_hint : th_in_check(p, p->stm);
         if (horizon_has_move(p, in_chk0)) return 0;   /* unknown: no soundness */
         si->snd = SND_LB | SND_UB;
         return in_chk0 ? -(MATE - ply) : (MATE - ply);
@@ -1387,6 +1447,12 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
         uint16_t m = buf[bi];
         if (bi != i) { buf[bi] = buf[i]; scores[bi] = scores[i]; buf[i] = m; }
         uint64_t ckey = key_after(p, m, key);      /* before make: reads the pre-move board */
+#if CHECK_HINT
+        /* Also before make: gives_check_exact reads the pre-move board. */
+        int chint = depth <= 1 ? gives_check_exact(p, m, enemy_ks) : -1;
+#else
+        int chint = -1;
+#endif
         /* TH-54: the child probes this bucket after make(), the mate-distance
          * clamp and the repetition scan -- 30-odd instructions of cover for a
          * load that misses to DRAM. Prefetch is semantically nothing, so this
@@ -1426,7 +1492,7 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
 #endif
         any = 1;
         SInfo ci;
-        int v = -search(p, depth - 1, ply + 1, -beta, -alpha, &ci, ckey);
+        int v = -search(p, depth - 1, ply + 1, -beta, -alpha, &ci, ckey, chint);
         unmake(p, &u);
         if (ci.rep_min < my_rep) my_rep = ci.rep_min;
         if (!(ci.snd & SND_LB)) all_children_lb = 0;
@@ -1487,7 +1553,7 @@ static void *helper_main(void *v) {
     HelperArg *a = v;
     tl_jitter = 0x9E3779B9u * (atomic_fetch_add(&g_tid, 1) + 1);
     SInfo si;
-    search(&a->pos, a->depth, 0, a->alpha, a->beta, &si, th_key(&a->pos));
+    search(&a->pos, a->depth, 0, a->alpha, a->beta, &si, th_key(&a->pos), -1);
     nodes_flush();
     return 0;
 }
@@ -1513,7 +1579,7 @@ static int root_search(THPos *p, int depth, int alpha, int beta, int workers,
         pthread_create(&th[i], 0, helper_main, &args[i]);
     }
     SInfo si;
-    int v = search(p, depth, 0, alpha, beta, &si, th_key(p));
+    int v = search(p, depth, 0, alpha, beta, &si, th_key(p), -1);
     g_abort = 1;
     for (int i = 0; i < nh; i++) pthread_join(th[i], 0);
     g_abort = 0;
@@ -1589,7 +1655,7 @@ int th_root_moves(THPos *p, int depth, uint16_t *out_moves, int *out_values, int
         uint64_t ckey = key_after(p, buf[i], rootkey);
         make(p, buf[i], &u);
         SInfo si;
-        int v = -search(p, depth - 1, 1, -MATE, MATE, &si, ckey);
+        int v = -search(p, depth - 1, 1, -MATE, MATE, &si, ckey, -1);
         unmake(p, &u);
         out_moves[i] = buf[i]; out_values[i] = v;
         if (out_snd)
@@ -2195,6 +2261,32 @@ uint64_t th_perft_bitboard(THPos *p, int depth) {
     BState b;
     bst_from(p, &b);
     return bst_perft(&b, p->stm, depth);
+}
+
+/* TH-60's acceptance gate. Walks the whole tree to `depth` and, at every
+ * position, checks gives_check_exact against the ground truth for every LEGAL
+ * move: make it, ask attacked() whether the side to move is now in check,
+ * unmake. Returns the number of DISAGREEMENTS, so 0 is the pass condition.
+ * Counts only legal moves, because the invariant it rests on -- the side not
+ * to move is never in check -- only holds for legal positions. */
+uint64_t th_check_diff(THPos *p, int depth) {
+    if (depth <= 0) return 0;
+    uint16_t buf[128];
+    int n = pseudo_moves(p, buf, -1);
+    int us = p->stm, eks = king_sq(p, 1 - us), myks = king_sq(p, us);
+    uint64_t bad = 0;
+    Undo u;
+    for (int i = 0; i < n; i++) {
+        int predicted = gives_check_exact(p, buf[i], eks);
+        int ks_after = KS_AFTER(buf[i], myks);
+        make(p, buf[i], &u);
+        if (attacked(p, ks_after, p->stm)) { unmake(p, &u); continue; }  /* illegal */
+        int truth = th_in_check(p, p->stm);
+        if (truth != predicted) bad++;
+        bad += th_check_diff(p, depth - 1);
+        unmake(p, &u);
+    }
+    return bad;
 }
 
 uint64_t th_perft(THPos *p, int depth) {

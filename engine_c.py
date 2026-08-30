@@ -61,6 +61,7 @@ int th_moves(THPos *p, uint16_t *out);
 void th_make(THPos *p, uint16_t m);
 int th_result(THPos *p);
 uint64_t th_perft(THPos *p, int depth);
+uint64_t th_check_diff(THPos *p, int depth);
 uint64_t th_perft_mailbox(THPos *p, int depth);
 uint64_t th_perft_bitboard(THPos *p, int depth);
 uint64_t th_key(const THPos *p);

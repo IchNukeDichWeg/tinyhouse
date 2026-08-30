@@ -373,6 +373,13 @@ def test_every_cffi_symbol_has_a_contract_check(tt):
 
     E.lib.th_init(); cover("th_init")                       # idempotent
     assert E.lib.th_perft(E.to_c(start), 4) == 1855; cover("th_perft")
+    # TH-60's gate: gives_check_exact against attacked() over the whole tree.
+    # 0 is the pass condition, and it is asserted on the drop-heavy position
+    # because maos and drops are where the predicate is subtle.
+    assert E.lib.th_check_diff(E.to_c(start), 5) == 0
+    assert E.lib.th_check_diff(
+        E.to_c(T.Position.from_tfen("1k2/4/2K1/4[PFUWpfuw] w")), 4) == 0
+    cover("th_check_diff")
     # both perft engines answer the same question; the differential walk test
     # is the real coverage, this pins the signatures
     assert E.lib.th_perft_mailbox(E.to_c(start), 4) == 1855; cover("th_perft_mailbox")
