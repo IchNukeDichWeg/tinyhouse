@@ -2783,3 +2783,48 @@ of a search node" has been contradicted three times.
 could not use**: the horizon's TT probe, the depth-1 TT probe, check detection
 by mask, the fused max-scan, and ordering at depth 1. Not less generation --
 less machinery around it.
+
+## Post-campaign: both bounds reproduced under a second Zobrist seed — CONFIRMED
+
+Every "no forced win within N plies" claim in this repo carried the same
+caveat: the bound is immune to horizon unsoundness, to a TT cutoff overrunning
+its budget and to store-side graph-history interaction, but NOT to a 64-bit
+Zobrist collision, which has no directional structure and could prune a subtree
+holding a real mate. That residual was unquantified rather than zero.
+
+Re-run under `--seed 0xC0FFEE --fresh`, on the shipped build
+(4202529700557302426), 16 workers, tt 2^31:
+
+| | White | Black |
+|---|---|---|
+| seed 0 | no forced win through **28** | no forced win through **30** |
+| seed 0xC0FFEE | no forced win through **28** | no forced win through **30** |
+| depths where the values disagree | **0** | **0** |
+| seed-0xC0FFEE cost | 805,234,472,864 nodes / 2.32 h | 1,097,208,238,876 / 3.05 h |
+
+**The node counts are not supposed to match, and do not.** Different keys mean
+a different table, so per-depth counts move by -87% to +37% and the totals by
+-6.6% (White) and +8.6% (Black). A run that reproduced the node counts would
+mean the seed had not changed. The result is that the VALUES agree at every
+completed depth.
+
+What this buys: a collision that hid a mate would have to strike the same
+subtree under two independent key sets. The residual is now negligible rather
+than unquantified. **It is not zero** -- two seeds are two samples, not a
+proof -- but it is no longer the weakest link in the claim.
+
+### The engine work, measured on the real workload
+
+These runs are the first full hunts on the post-TT, post-ordering build, so
+they price the session's gains against the runs that produced the bounds:
+
+| | seed-0 run | seed-0xC0FFEE run | |
+|---|---|---|---|
+| White | 70.26 Mnps | **96.35 Mnps** | +37.1% |
+| Black | 76.83 Mnps | **100.03 Mnps** | +30.2% |
+
+Wall clock moved 3.41 h -> 2.32 h and 3.65 h -> 3.05 h, but those two figures
+are not comparable on their own: the trees differ by -6.6% and +8.6%. **nps is
+the right column here** precisely because the seed changed the tree, which is
+the reverse of the usual rule in this file -- and it agrees with the +28-30%
+the controlled A/B runs measured.
