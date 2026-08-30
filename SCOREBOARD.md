@@ -2888,3 +2888,53 @@ null. The sort's remaining cost is concentrated in the 13.8% of interior nodes
 that never cut off and run the selection to completion at ~90 comparisons
 each; cutting that means not ordering the tail, which is Class B and would
 have to pay for the nodes it adds.
+
+## Post-campaign: the horizon, re-instrumented and re-shaped
+
+The horizon looks nothing like it did when it was last measured, because the
+depth-1 work removed interior cost around it rather than changing the horizon
+itself. Depth 17, tt 2^30, one worker, shipped build:
+
+| | now | when HORIZON_LAZY_GEN was written |
+|---|---|---|
+| horizon share of all nodes | **57.6%** | 34.2% |
+| answered by HORIZON_FAST_PATH | **74.2%** | 35.6% |
+| fell back to generating | 25.8% | 64.4% |
+| needed the FULL move list | 1.9% | -- |
+| no legal move at all | 0.43% | 1.0% |
+
+**A block can become the majority of the engine without anyone touching it.**
+The horizon is now more than half of all nodes.
+
+### TH-58 · the no-sliders shortcut inside `any_legal` — NULL
+
+`search()` skips make/attacked/unmake for any move that provably cannot expose
+its own king (TH-52), and `any_legal` never got the same treatment. Applied
+there it measured **+0.25% against a 0.61pp floor, p=0.296** -- reverted.
+
+The instrumentation says why, and it is worth keeping: the shortcut is gated on
+not being in check, and **12.0% of horizon nodes ARE in check**, roughly half
+of everything that reaches the fallback. It fired on only 17.5% of legality
+candidates. The same idea that paid inside `search()` had almost no surface
+left at the horizon.
+
+### TH-58b · stop searching for a drop square — CONFIRMED, +1.48%
+
+The fast path answered 74.2% of horizon nodes by scanning the board for an
+empty square. For a non-pawn that scan cannot fail: 16 squares, exactly 10
+units, Crazyhouse never removes any, so at most 10 squares are occupied -- and
+a unit in hand is one fewer on the board, so holding F, U or W guarantees at
+least 7 empty. Only a pawn-only hand still searches, since pawn drops are
+barred from ranks 1 and 4 and all eight middle squares can be occupied.
+
+| | |
+|---|---|
+| nodes | 65,009,095 both arms |
+| passes | x1.0148 / x1.0070 / x1.0167 |
+| floor | 0.97pp between passes |
+| result | **+1.48%**, 24/33 ratios, p=0.0135 |
+
+Above the floor but only by half again, so read it as 1-1.7% rather than a
+sharp 1.48%. `RULES.md` already stated the guarantee in its stalemate note;
+this is that sentence turned into code, which makes the path shorter AND more
+obviously correct than the search it replaced.
