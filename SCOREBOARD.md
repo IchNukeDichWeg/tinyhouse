@@ -2836,3 +2836,55 @@ are not comparable on their own: the trees differ by -6.6% and +8.6%. **nps is
 the right column here** precisely because the seed changed the tree, which is
 the reverse of the usual rule in this file -- and it agrees with the +28-30%
 the controlled A/B runs measured.
+
+## Post-campaign: the hot operations re-priced after the table and ordering work
+
+The earlier pricing table is stale: depth-1 nodes stopped probing (TH-53) and
+stopped ordering (TH-55), and those are 70-73% of interior nodes. Re-priced by
+duplication on the shipped build, depth 17, tt 2^30, one worker, nine
+interleaved repeats, node-identical across every arm, floor **0.08%**:
+
+| one extra call of | now | before |
+|---|---|---|
+| **selection-sort pass** | **18.96%** | 10.62% |
+| **TT probe, far bucket** | **10.06%** | -- |
+| **`horizon_has_move`** | **8.10%** | -- |
+| `attacked` | 5.40% | 2.34% |
+| `order_score` | 3.82% | 8.96% |
+| make + unmake | 3.46% | 2.67% |
+
+`order_score` more than halved, which is TH-55 showing up where it should. The
+others rose as a share because the denominator shrank. The sort is now the
+single biggest block in the engine.
+
+### TH-57 · vectorise the selection scan — CONFIRMED, +1.12%
+
+`if (scores[j] > scores[bi]) bi = j` carries `bi` between iterations, so clang
+keeps it serial. Split into a pure max reduction plus a short scan for the
+first index holding that max and it vectorises -- 6 -> 21 vector/max
+instructions inside `search()`. Node-identical by construction: the original
+takes the first strictly-greater element, which is the lowest index equal to
+the maximum.
+
+| | |
+|---|---|
+| nodes | 65,009,095 both arms |
+| passes | x1.0106 / x1.0161 / x1.0112 |
+| floor | 0.56pp between passes |
+| result | **+1.12%**, 30/33 ratios, p=1.4e-06 |
+
+**Estimated 8x high, and it is the same error shape as the last three.** A
+block worth 19% of runtime looked like it had several points in it. The scans
+are ~16 elements: vector setup and the second pass to locate the index eat
+most of what the reduction saves. The pattern by now is unmistakable -- sizing
+a change from how much time a block CONSUMES keeps overshooting, because the
+question is how much of that block the change actually removes.
+
+### What the table says to try next, and what it says to leave alone
+
+`horizon_has_move` at 8.10% is untouched and the horizon is ~34% of nodes.
+`attacked` at 5.40% has already been attacked once via bitboards and measured
+null. The sort's remaining cost is concentrated in the 13.8% of interior nodes
+that never cut off and run the selection to completion at ~90 comparisons
+each; cutting that means not ordering the tail, which is Class B and would
+have to pay for the nodes it adds.
