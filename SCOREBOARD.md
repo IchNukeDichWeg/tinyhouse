@@ -2994,3 +2994,57 @@ ones and twos, and the two remaining items above the floor are both awkward:
   out illegal, but it must run before `make()` because it reads the pre-move
   board. Recovering that means computing the child key from the Undo after the
   legality test -- two key derivations that must agree forever.
+
+## Post-campaign: TH-60 · the parent answers the horizon's in-check question
+
+`th_in_check` at the horizon priced at 4.55%, the largest single item left, and
+it is 37.4M calls of `attacked()` asking something the parent already knows.
+
+**The invariant that makes a parent-side answer sound.** In a legal position the
+side NOT to move is never in check, so before the parent's move the enemy king
+carries no attacker at all -- only attacks the move CREATES can matter. And
+nothing in this game slides, so there are exactly two ways to create one: the
+piece landing on `to` attacks the king directly, or the move vacates the leg
+square of a friendly mao aimed at it. There is no third, and that is what makes
+the predicate finite enough to write down.
+
+**It is not `gives_direct_check`.** That one documents itself as ordering-only
+and is wrong for this purpose in two specific ways: it reads the mao leg on the
+PRE-move board, so it answers no exactly when the leg is the square being
+vacated, and it ignores discovered checks entirely.
+
+### The gate came first, and it is now a test
+
+`th_check_diff` walks the whole tree and compares the prediction against
+make/attacked/unmake for every legal move at every position:
+
+| position | depth | positions | disagreements |
+|---|---|---|---|
+| start | 6 | 139,141 | 0 |
+| ply-budget repro | 6 | 1,558,781 | 0 |
+| **drop-heavy, 8 in hand** | **6** | **1,088,639,234** | **0** |
+| promotion and hands | 6 | 7,575,362 | 0 |
+| mao check | 6 | 48,628 | 0 |
+| published mate-in-9 | 6 | 181,251 | 0 |
+
+Zero over ~1.15 billion. This is the first change in the campaign where the
+correctness gate ran BEFORE the benchmark, deliberately: the double-mao-check
+bug was a hand-written second opinion on a predicate of exactly this shape, and
+it survived 74,702 walked positions and every perft number.
+
+### The measurement, and why it is not a number
+
+| run | median | ratios | p | between-pass floor |
+|---|---|---|---|---|
+| 12 rounds x 3 | +1.50% | 26/33 | 0.00132 | 2.17pp |
+| 12 rounds x 5 | +1.70% | 40/55 | 0.00102 | 2.22pp |
+
+**Direction established, magnitude not.** Two independent runs agree in sign
+with p around 0.001, so the change is not harmful and is almost certainly
+positive. But the box sat at load 5-8 throughout and the between-pass spread
+swamped the effect, so `nps.py` returns NULL on both. Shipped on the mechanism
+and the gate rather than on a figure -- **do not quote 1.5% or 1.7% from this
+file.** It is owed a re-measure on a quiet machine.
+
+Also worth recording: the 4.55% price predicted more than this. Sizing from
+what a block CONSUMES has now overshot on five consecutive changes.
