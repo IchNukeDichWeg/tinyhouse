@@ -2813,6 +2813,14 @@ subtree under two independent key sets. The residual is now negligible rather
 than unquantified. **It is not zero** -- two seeds are two samples, not a
 proof -- but it is no longer the weakest link in the claim.
 
+**It is also not a pure seed control, and that limits what a disagreement
+would have meant.** The controls ran on build 4202529700557302426 against the
+originals' 14767063362219477789, because the table and ordering work landed in
+between -- seed and build moved together. Agreement across two changed
+variables is a STRONGER check than a seed control alone; a disagreement would
+have been unattributable. Worth stating because the run was cheap enough to
+have been done as a clean control and was not.
+
 ### The engine work, measured on the real workload
 
 These runs are the first full hunts on the post-TT, post-ordering build, so

@@ -15,19 +15,7 @@
       "seconds": 10231.6,
       "nodes_note": "the depth-28 slice; the whole run from depth 6 was 861,770,708,152 nodes in 12,265.9s (3.41 h) at 70.3 Mnps average.",
       "tt": "2^31 (32 GiB) from depth 6, jump mode, never resized. 94% occupancy after depth 24, 100% from depth 26 on.",
-      "supersedes": "the depth-26 bound (105,022,380,063 nodes / 1747.6s). Depth 26 now costs 1523.1s on 1.3% more nodes, +16.2% nps.",
-      "second_seed": {
-        "seed": "0xC0FFEE",
-        "result": "REPRODUCED: no forced WHITE win within 28 plies, and every completed depth returned the same value as the seed-0 run",
-        "nodes": 805234472864,
-        "seconds": 8357.5,
-        "deepest_slice": {
-          "nodes": 676071261032,
-          "seconds": 6961.4
-        },
-        "build": 4202529700557302426,
-        "note": "an INDEPENDENT tree, not a re-run: different Zobrist keys mean different table behaviour, so node counts differ per depth by -87% to +37% and the totals by -6.6% (White) / +8.6% (Black). The VALUES agreeing at every depth is the result; the node counts are not expected to match."
-      }
+      "supersedes": "the depth-26 bound (105,022,380,063 nodes / 1747.6s). Depth 26 now costs 1523.1s on 1.3% more nodes, +16.2% nps."
     },
     {
       "method": "null-window mate hunt, iterative deepening in one process from depth 6 in steps of 2",
@@ -41,19 +29,7 @@
       "seconds": 9796.2,
       "nodes_note": "the depth-30 slice; the whole run from depth 6 was 1,010,074,226,106 nodes in 13,147.7s (3.65 h) at 76.8 Mnps average.",
       "tt": "2^31 (32 GiB) from depth 6, jump mode, never resized. 94% occupancy after depth 26, 100% from depth 28 on.",
-      "supersedes": "the depth-28 bound (150,555,712,885 nodes / 2153.0s), which ran at 2^30 because growth to 2^31 was refused. This run got 2^31 outright, so the earlier run's per-depth timings are not comparable with these.",
-      "second_seed": {
-        "seed": "0xC0FFEE",
-        "result": "REPRODUCED: no forced BLACK win within 30 plies, and every completed depth returned the same value as the seed-0 run",
-        "nodes": 1097208238876,
-        "seconds": 10968.7,
-        "deepest_slice": {
-          "nodes": 915035812598,
-          "seconds": 9080.1
-        },
-        "build": 4202529700557302426,
-        "note": "an INDEPENDENT tree, not a re-run: different Zobrist keys mean different table behaviour, so node counts differ per depth by -87% to +37% and the totals by -6.6% (White) / +8.6% (Black). The VALUES agreeing at every depth is the result; the node counts are not expected to match."
-      }
+      "supersedes": "the depth-28 bound (150,555,712,885 nodes / 2153.0s), which ran at 2^30 because growth to 2^31 was refused. This run got 2^31 outright, so the earlier run's per-depth timings are not comparable with these."
     }
   ],
   "proven_wins_found": [
@@ -76,7 +52,7 @@
   ],
   "summary": "no forced win for either side within 28 (White) / 30 (Black) plies, each reproduced under a second independent Zobrist seed; game value still open",
   "machine": "Both bounds were measured on an Apple M5 Pro, 18 cores, 64 GiB, macOS (Darwin 25.6.0), in one session, on the same engine build, at the same table size (2^31) and worker count (16). This is the first pair for which the per-depth timings are directly comparable.",
-  "note": "Two claim strengths, not one. A reported mate is a proof of a forced win and, since the TT_BUDGET_GUARD in tinyhouse.c, of the distance it names: the search returns an unsound 0 at the horizon, so a mate score can only come from real terminals. A 'no forced win within N plies' bound is immune to horizon unsoundness, to a TT cutoff overrunning its budget and to store-side graph-history interaction, but not to a 64-bit Zobrist collision, which has no directional structure and could prune a subtree holding a real mate. That residual was closed on 2026-08-30: both bounds were reproduced under seed 0xC0FFEE, whose collision set is independent of seed 0's, and every completed depth agreed. A collision that hid a mate would have to strike the same subtree under two independent key sets, so the residual is now negligible rather than merely unquantified. It is not zero: two seeds are two samples. Deeper bounds: run solve_hunt.py (see README).",
+  "note": "Two claim strengths, not one. A reported mate is a proof of a forced win and, since the TT_BUDGET_GUARD in tinyhouse.c, of the distance it names: the search returns an unsound 0 at the horizon, so a mate score can only come from real terminals. A 'no forced win within N plies' bound is immune to horizon unsoundness, to a TT cutoff overrunning its budget and to store-side graph-history interaction, but not to a 64-bit Zobrist collision, which has no directional structure and could prune a subtree holding a real mate. That residual was closed on 2026-08-30: both bounds were reproduced under seed 0xC0FFEE, whose collision set is independent of seed 0's, and every completed depth agreed. A collision that hid a mate would have to strike the same subtree under two independent key sets, so the residual is now negligible rather than merely unquantified. It is not zero: two seeds are two samples, and the control also moved the engine build, so see seed_controls_note for what a disagreement could not have told us. Deeper bounds: run solve_hunt.py (see README).",
   "reproducibility": "The node counts above are NOT exactly reproducible and are not claimed to be. These runs used 16 workers and lazy SMP is nondeterministic: helpers perturb move ordering, so the same depth run twice gives different node counts. They also move with table size and with any search change. The CLAIMS do not depend on any of this: a null-window hunt returning 0 proves the negative whatever the thread count. Reproduce with: solve_hunt.py 0 --tt 31 --workers 16 --maxdepth 28  /  solve_hunt.py 1 --tt 31 --workers 16 --maxdepth 30",
   "growth_note": "Per-2-ply node growth jumps at depth 28 for BOTH colours and neither colour's own history predicts it: White ran x4.1, x4.4, x3.9 and then x6.8; Black ran x9.6, x2.1 and then x8.5. An ETA extrapolated from the previous growth factor called White's depth 28 at 416.51G against an actual 720.27G. solve_hunt.py now estimates from MEASURED_NODES, which holds both of these runs.",
   "owed": "The Zobrist-seed control is DONE for both bounds (see seed_controls). Still owed: no bound has been run under a third seed or on a second machine, and the game value remains open -- the next real step is depth 30 for White and 32 for Black, not another control.",
@@ -112,5 +88,5 @@
       "confirms": "the seed-0 depth-30 bound"
     }
   ],
-  "seed_controls_note": "Both bounds re-run under a second Zobrist seed (0xC0FFEE) and both returned 0 at every depth from 6, so the Zobrist-collision residual named in 'note' is checked and neither bound rests on a single hash. CAVEAT: these controls also ran on a DIFFERENT engine build (4202529700557302426 vs 14767063362219477789) because move-ordering work landed in between, so seed and build moved together. That makes the agreement a stronger independent check but means a disagreement could not have been attributed, and the node counts are not comparable with the seed-0 runs. The controls are ~20% faster per node at the same table size and worker count."
+  "seed_controls_note": "Both bounds re-run under a second Zobrist seed (0xC0FFEE) and both returned 0 at every depth from 6, so the Zobrist-collision residual named in 'note' is checked and neither bound rests on a single hash. CAVEAT: these controls also ran on a DIFFERENT engine build (4202529700557302426 vs 14767063362219477789) because move-ordering work landed in between, so seed and build moved together. That makes the agreement a stronger independent check but means a disagreement could not have been attributed, and the node counts are not comparable with the seed-0 runs. The controls are ~20% faster per node at the same table size and worker count. The node counts are not merely incomparable, they are expected to DIVERGE: per depth they move by -87% to +37% and the totals by -6.6% (White) and +8.6% (Black). A control that reproduced the seed-0 node counts would mean the seed had not changed."
 }
