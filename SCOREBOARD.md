@@ -2938,3 +2938,59 @@ Above the floor but only by half again, so read it as 1-1.7% rather than a
 sharp 1.48%. `RULES.md` already stated the guarantee in its stalemate note;
 this is that sentence turned into code, which makes the path shorter AND more
 obviously correct than the search it replaced.
+
+## Post-campaign: pricing the last unmeasured blocks, and TH-59
+
+Everything not yet priced, by duplication, depth 17, tt 2^30, one worker, nine
+interleaved repeats, node-identical across all arms:
+
+| one extra call of | cost |
+|---|---|
+| **`th_in_check` at the horizon** | **4.55%** |
+| `key_after` | 2.88% |
+| `tt_store` | 1.42% |
+| repetition scan | +0.46% -> NULL |
+| horizon fast-path hand test | +1.27% -> **impossible** |
+
+**The last row is the useful one.** Adding work cannot make the engine faster,
+so an arm that only ADDS a test and reads +1.27% is measuring code layout, not
+the test. The control floor said 0.54%; the real floor for this run was ~1.3%.
+Anything in this table under about 1.5% is not a measurement. `bench_ab`'s
+control arms bound run-to-run noise between two builds of the SAME source; they
+do not bound the alignment luck of a build whose source differs.
+
+### TH-59 · fold the pawn test into the diagonal walk — CONFIRMED, +2.14%
+
+`attacked()` is the hottest leaf in the engine and it read the same squares
+twice: the pawn-capture squares are a subset of the diagonal ones, so the
+separate PCAPS loop re-loaded board entries the DIAG loop had already read.
+`CHK_PAWN[c][sq]` is already the mask of squares a pawn of colour c attacks sq
+from, built in `init_tables` from PCAPS itself, so the fold cannot change the
+answer. No new table.
+
+| | |
+|---|---|
+| nodes | 65,009,095 both arms |
+| passes | x1.0164 / x1.0241 / x1.0214 |
+| floor | 0.77pp |
+| result | **+2.14%**, 27/33 ratios, p=0.000324 |
+
+### Where the engine now stands
+
+Three attempts this round: **+1.48%** (TH-58b), **NULL** (TH-58), **+2.14%**
+(TH-59). The regime has changed. The structural wins -- the depth-1 probe, the
+depth-1 ordering -- were worth 19-20% each and are gone. What is left prices in
+ones and twos, and the two remaining items above the floor are both awkward:
+
+- **`th_in_check` at the horizon, 4.55%.** Removable only by having the parent
+  compute EXACTLY whether its move gives check and passing that down. The masks
+  for it exist (CHK_FROM plus MAO_LEGS for the discovered case), but it is a
+  second, independent computation of a fact the search already derives from
+  `attacked()` -- and a hand-written second opinion on exactly this kind of
+  predicate is what produced the double-mao-check bug that survived 74,702
+  walked positions and every perft number. It needs a differential test against
+  `attacked()` before it can be trusted, not just a benchmark.
+- **`key_after`, 2.88%.** About 30% of its calls are spent on moves that turn
+  out illegal, but it must run before `make()` because it reads the pre-move
+  board. Recovering that means computing the child key from the Undo after the
+  legality test -- two key derivations that must agree forever.
