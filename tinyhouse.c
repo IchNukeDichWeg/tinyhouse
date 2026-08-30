@@ -1273,6 +1273,19 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
  *   1  fused (shipped, +8.42% against a 0.74% control floor) */
 #define ORDER_FUSED_MAX 1
 
+/* TH-57: the selection scan is the biggest single block left -- one extra pass
+ * costs 18.96% against a 0.08% floor, so the sort is about a fifth of the
+ * engine. It cannot vectorise as written: `if (scores[j] > scores[bi]) bi = j`
+ * carries `bi` between iterations, and the compiler has to keep it serial.
+ *
+ * Split into a pure max reduction, which clang WILL vectorise, and a short
+ * scan for the first index holding that max. Node-identical by construction:
+ * the original takes the first strictly-greater element, which is exactly the
+ * lowest index equal to the maximum.
+ *   0  the serial scan (the node-identity pin)
+ *   1  split into reduce-then-locate (shipped) */
+#define SPLIT_ARGMAX 1
+
 /* TH-55: ordering at depth 1 is doing no work. Instrumented over a depth-18
  * hunt, depth-1 nodes are 72.6% of all interior nodes, they generate 17.21
  * moves, they search 0.99 of them, and 100% of their cutoffs come on the first
@@ -1313,11 +1326,21 @@ static int search(THPos *p, int depth, int ply, int alpha, int beta, SInfo *si, 
     for (int i = 0; i < n; i++) {
 #if ORDER_FUSED_MAX
         int bi = !ordered ? i : i ? i : bi0;
-        if (ordered && i)
+        if (ordered && i) {
+#if SPLIT_ARGMAX
+            int mx = scores[i];
+            for (int j = i + 1; j < n; j++) if (scores[j] > mx) mx = scores[j];
+            bi = i;
+            while (scores[bi] != mx) bi++;
+        }
+#else
+            for (int j = i + 1; j < n; j++) if (scores[j] > scores[bi]) bi = j;
+        }
+#endif
 #else
         int bi = i;
-#endif
         for (int j = i + 1; j < n; j++) if (scores[j] > scores[bi]) bi = j;
+#endif
         /* Guarded because ORDER_MIN_DEPTH made bi == i the COMMON case: at an
          * unordered depth the swap is a no-op that still reads scores[i],
          * which is never written there. Reading it is undefined behaviour even
