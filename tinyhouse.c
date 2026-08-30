@@ -115,20 +115,36 @@ static void init_tables(void) {
     tables_ready = 1;
 }
 
+/* 0 = a separate PCAPS loop (the node-identity pin); 1 = shipped. */
+#define ATTACKED_MERGE_PAWN 1
+
 static int attacked(const THPos *p, int sq, int by) {
     const uint8_t *n;
     for (n = ORTH[sq]; *n != 0xff; n++) {
         int pc = p->board[*n];
         if (pc && COLOR(pc) == by && (TYPE(pc) == W || TYPE(pc) == K)) return 1;
     }
+    /* TH-59: the pawn-capture squares are a SUBSET of the diagonal ones, so the
+     * old separate PCAPS loop read board squares this loop had already read.
+     * CHK_PAWN[c][sq] is the mask of squares a pawn of colour c attacks sq
+     * from, built in init_tables from PCAPS itself, so folding the two cannot
+     * change the answer. attacked() is the hottest leaf in the engine -- one
+     * extra call prices at 5.40% in search and 4.55% at the horizon. */
     for (n = DIAG[sq]; *n != 0xff; n++) {
         int pc = p->board[*n];
-        if (pc && COLOR(pc) == by && (TYPE(pc) == F || TYPE(pc) == K)) return 1;
+        if (!pc || COLOR(pc) != by) continue;
+        int t = TYPE(pc);
+        if (t == F || t == K) return 1;
+#if ATTACKED_MERGE_PAWN
+        if (t == P && ((CHK_PAWN[by][sq] >> *n) & 1)) return 1;
+#endif
     }
+#if !ATTACKED_MERGE_PAWN
     for (n = PCAPS[1 - by][sq]; *n != 0xff; n++) {
         int pc = p->board[*n];
         if (pc && COLOR(pc) == by && TYPE(pc) == P) return 1;
     }
+#endif
     for (int i = 0; MAO_ATT[sq][i][0] != 0xff; i++) {
         int pc = p->board[MAO_ATT[sq][i][0]];
         if (pc && COLOR(pc) == by && TYPE(pc) == U && !p->board[MAO_ATT[sq][i][1]]) return 1;
